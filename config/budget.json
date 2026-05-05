@@ -1,0 +1,59 @@
+{
+  "version": "0.11.9-alpha",
+  "description": "乾坤镜平台 + 插件架构代码预算。底座轻量，插件/适配/文档无上限。",
+  "architecture_note": "`plugin_runner.py` 是胶水平台，所有能力（诊断/Web/土行孙）均为插件，可替换、可禁用、可社区扩展。",
+  "categories": {
+    "base_platform": {
+      "description": "底座不可拆卸部分 — 乾坤镜的纯数据平台",
+      "modules": [
+        "credential_vault.py — 凭据保险库（统一密钥入口，78 行）",
+        "archiver.py + archiver_*.py (7 文件) — 唯一写入者",
+        "plugin_runner.py — 胶水平台（插件发现、YAML 解析、子进程隔离）"
+      ],
+      "total_budget": 2000,
+      "rule": "底座不可拆卸 Python 部分 <2,000 行（js/go 探针为独立运行时，单独核算）",
+      "verification": "wc -l"
+    },
+    "cluster_extension": {
+      "description": "Cluster 扩展（可选，需 pymysql）",
+      "modules": ["cluster_archiver.py", "cluster_pool.py", "cluster_reflector.py", "bridge.py"],
+      "total_budget": 600,
+      "rule": "唯一额外依赖 pymysql"
+    },
+    "plugin_layer": {
+      "description": "插件层（可替换、可禁用、可社区扩展）— ⬆️不设预算",
+      "modules": [
+        "plugins/lit_lite/ — 诊断插件（lit_lite.skill.yaml 注册）",
+        "plugins/web_dashboard/ — Web 目镜插件（web_dashboard.skill.yaml 注册）",
+        "plugins/tusunsun/ — 土行孙专属插件（tusunsun_dx.skill.yaml 注册）",
+        "社区插件 — 任何人都可通过 .skill.yaml 契约注册新插件"
+      ],
+      "total_budget": "unlimited",
+      "rule": "插件越多生态越强，无上限"
+    },
+    "adapter_layer": {
+      "description": "适配层（官方参考实现）— ⬆️不设预算",
+      "modules": [
+        "Python 适配器（8 个：probe_uni.py / LangChain / LlamaIndex / CrewAI / OpenHands / AutoGPT / Hermes / LIT）",
+        "JS 适配器（5 个：LangChain.js/LIT/OpenClaw/Vercel/土行孙 bridge）",
+        "Go 适配器（4 个：LangChainGo/OpenCode 等）"
+      ],
+      "total_budget": "unlimited",
+      "rule": "每新增一个框架即新增一个生态节点，无上限"
+    },
+    "diagnosis_rules": {
+      "description": "诊断规则定义 — 数据资产，非代码",
+      "modules": ["config/diseases.yaml (165 种病症)"],
+      "total_budget": "unlimited",
+      "rule": "规则越多可诊越广，无上限"
+    },
+    "test_layer": {
+      "description": "测试代码",
+      "rule": "不纳入生产代码预算，无硬性上限"
+    },
+    "docs": {
+      "description": "文档（概念/规范/工程管理/说明）",
+      "rule": "不纳入生产代码预算，无上限"
+    }
+  }
+}

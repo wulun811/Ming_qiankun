@@ -1,0 +1,29 @@
+#!/usr/bin/env python3
+"""
+乾坤镜 opencode 包装器探针
+用法: 
+  ./ming-run opencode [args...]          # 包装器模式（默认）
+  ./ming-run opencode --backfill          # 回溯历史数据
+  ./ming-run opencode --daemon            # 守护模式持续轮询
+
+通过官方 debug 日志实时监听 opencode 事件，发射到乾坤镜热轨。
+零侵入，零第三方依赖。
+"""
+
+import sys
+import os
+
+# 添加 src 到路径
+src_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
+if src_dir not in sys.path:
+    sys.path.insert(0, src_dir)
+
+if "--backfill" in sys.argv:
+    from adapters.backfill_opencode import main
+elif "--daemon" in sys.argv:
+    from adapters.daemon_opencode import main
+else:
+    from adapters.probe_opencode_wrapper import main
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,5 @@
+# Optional: only needed for Web Dashboard export.
+# Core probe + archiver + CLI mode requires zero third-party dependencies.
+pyyaml
+
+# For development/testing: pip install pytest

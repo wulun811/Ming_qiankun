@@ -1,0 +1,27 @@
+{
+  "id": "mingjing-probe",
+  "name": "乾坤镜探针",
+  "description": "乾坤镜 (Mingjing) 监控探针，采集 OpenClaw 运行时事件至热轨",
+  "enabledByDefault": false,
+  "version": "0.1.0",
+  "activation": {
+    "onStartup": true
+  },
+  "skills": ["./skills"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "hotPath": {
+        "type": "string",
+        "default": "~/.ming/hot",
+        "description": "乾坤镜热轨路径"
+      },
+"heartbeatIntervalMs": {
+  "type": "integer",
+  "default": 30000,
+  "description": "心跳间隔（毫秒），启动时立即触发一次"
+}
+    }
+  }
+}

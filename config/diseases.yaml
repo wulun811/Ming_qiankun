@@ -1,0 +1,2797 @@
+# 乾坤镜 157 种病症定义
+# 版本: v0.11.9-alpha
+# 格式: 见 config/diseases_schema.json
+# 生成: 2026-05-03
+# 安全声明：以下危险工具名单仅用于诊断匹配，非安全建议。
+#           乾坤镜是诊断工具，不是安全产品。请勿依赖此名单做安全防护。
+
+# ============================================================
+# 一、系统/进程层（19 个）
+# ============================================================
+
+- id: SYS-001
+  name: 进程崩溃/消失
+  layer: system
+  severity: P0
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["system_crash"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='system_crash' AND timestamp > ?
+    GROUP BY system
+  description: 进程意外消失，可能是 OOM、信号终止或人为 kill
+
+- id: SYS-002
+  name: 内存溢出（OOM）
+  layer: system
+  severity: P0
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["error"]
+    fields: ["error_type"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='error' AND timestamp > ?
+    AND (json_extract(payload, '$.error_type') LIKE '%MemoryError%' OR json_extract(payload, '$.error_type') LIKE '%OOM%' OR json_extract(payload, '$.error_type') LIKE '%out of memory%')
+    GROUP BY system
+  description: 进程内存溢出，通常是内存不足或内存泄漏导致
+
+- id: SYS-003
+  name: 内存持续增长（泄漏）
+  layer: system
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["platform_snapshot"]
+    fields: ["vm_rss_kb"]
+  sql_template: |
+    SELECT system,
+      AVG(CASE WHEN timestamp > CAST(strftime('%s', 'now', '-15 minutes') AS REAL) THEN json_extract(payload, '$.vm_rss_kb') END) as recent_rss,
+      AVG(CASE WHEN timestamp <= CAST(strftime('%s', 'now', '-15 minutes') AS REAL) THEN json_extract(payload, '$.vm_rss_kb') END) as early_rss
+    FROM events WHERE event_type='platform_snapshot' AND timestamp > ?
+    AND system IN ('__host__', 'openclaw')
+    GROUP BY system HAVING recent_rss > early_rss * 1.8
+  description: RSS 近期均值显著高于早期均值（≥1.8x），疑似内存持续泄漏而非正常波动
+
+- id: SYS-004
+  name: 虚拟内存异常膨胀
+  layer: system
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["platform_snapshot"]
+    fields: ["vm_size_kb", "vm_rss_kb", "proc_name", "proc_exe"]
+  sql_template: |
+    SELECT system,
+           AVG(json_extract(payload, '$.vm_size_kb') - json_extract(payload, '$.vm_rss_kb')) as swap_gap,
+           MAX(json_extract(payload, '$.proc_exe')) as proc_exe
+    FROM events WHERE event_type='platform_snapshot' AND timestamp > ?
+    AND system IN ('__host__', 'openclaw')
+    GROUP BY system
+    HAVING swap_gap > IIF(MAX(json_extract(payload, '$.proc_exe')) LIKE '%node%' OR COALESCE(MAX(json_extract(payload, '$.proc_name')),'') LIKE '%node%', {env.swap_gap_node_kb}, {env.swap_gap_base_kb})
+  env_thresholds:
+    baremetal:
+      swap_gap_base_kb: 5242880
+      swap_gap_node_kb: 31457280
+    container:
+      swap_gap_base_kb: 10485760
+      swap_gap_node_kb: 41943040
+    vm:
+      swap_gap_base_kb: 5242880
+      swap_gap_node_kb: 31457280
+  description: 虚拟内存远超物理内存（Node.js 阈值 30GB，其他 5GB，容器环境下更宽容）
+
+- id: SYS-005
+  name: 文件描述符泄漏
+  layer: system
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["platform_snapshot"]
+    fields: ["fd_count"]
+  sql_template: |
+    SELECT system, MIN(json_extract(payload, '$.fd_count')) as min_fd,
+           MAX(json_extract(payload, '$.fd_count')) as max_fd
+    FROM events WHERE event_type='platform_snapshot' AND timestamp > ?
+    AND system IN ('__host__', 'openclaw') AND json_extract(payload, '$.fd_count') > 0
+    GROUP BY system HAVING max_fd > min_fd * 2 AND max_fd > 500
+  description: 文件描述符数量持续增长，可能未正确关闭文件/连接
+
+- id: SYS-006
+  name: 线程爆炸
+  layer: system
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["platform_snapshot"]
+    fields: ["threads"]
+  sql_template: |
+    SELECT system, MAX(json_extract(payload, '$.threads')) as max_threads
+    FROM events WHERE event_type='platform_snapshot' AND timestamp > ?
+    AND system IN ('__host__', 'openclaw') AND json_extract(payload, '$.threads') > 0
+    GROUP BY system HAVING max_threads > 200
+  description: 线程数异常增长，可能导致上下文切换开销暴增
+
+- id: SYS-007
+  name: 磁盘空间不足
+  layer: system
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["__health__"]
+    fields: ["disk_free_mb"]
+  sql_template: |
+    SELECT system, json_extract(payload, '$.disk_free_mb') as free_mb
+    FROM events WHERE event_type='__health__' AND timestamp > ?
+    AND json_extract(payload, '$.disk_free_mb') < 500
+    ORDER BY json_extract(payload, '$.disk_free_mb') ASC LIMIT 5
+  description: 磁盘剩余空间低于 500MB，可能导致日志写入失败
+
+- id: SYS-008
+  name: 静默异常（僵尸进程）
+  layer: system
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["platform_snapshot"]
+    fields: ["vm_rss_kb"]
+  sql_template: |
+    SELECT system, MAX(timestamp) as last_event
+    FROM events WHERE system != '__host__' AND timestamp > ?
+    GROUP BY system HAVING last_event < CAST(strftime('%s', 'now', '-10 minutes') AS REAL)
+  description: PID 存活但 10 分钟内无事件发出，可能已僵死
+
+- id: SYS-009
+  name: 时钟偏移
+  layer: system
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["__health__"]
+    fields: ["_clock_skew"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='__health__' AND timestamp > ?
+    AND json_extract(payload, '$_clock_skew') = 1
+    GROUP BY system
+  description: 系统时钟与标准时间偏差过大，影响事件排序和诊断
+
+- id: SYS-010
+  name: IO 异常（异常文件打开）
+  layer: system
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["io_anomaly"]
+    fields: ["fd_type"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='io_anomaly' AND timestamp > ?
+    AND json_extract(payload, '$.fd_type') = 'new'
+    GROUP BY system
+  description: 异常文件打开模式，可能是恶意行为或配置错误
+
+- id: SYS-011
+  name: IO 写入量异常
+  layer: system
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["platform_snapshot"]
+    fields: ["io_write_bytes"]
+  sql_template: |
+    SELECT system, MAX(json_extract(payload, '$.io_write_bytes')) as max_write
+    FROM events WHERE event_type='platform_snapshot' AND timestamp > ?
+    AND system IN ('__host__', 'openclaw') AND json_extract(payload, '$.io_write_bytes') > 0
+    GROUP BY system HAVING max_write > 1073741824
+  description: 短时间写入量暴增，可能是日志风暴或数据异常
+
+- id: SYS-012
+  name: IO 读取量异常
+  layer: system
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["platform_snapshot"]
+    fields: ["io_read_bytes"]
+  sql_template: |
+    SELECT system, MAX(json_extract(payload, '$.io_read_bytes')) as max_read
+    FROM events WHERE event_type='platform_snapshot' AND timestamp > ?
+    AND system IN ('__host__', 'openclaw') AND json_extract(payload, '$.io_read_bytes') > 0
+    GROUP BY system HAVING max_read > 1073741824
+  description: 短时间读取量暴增，可能是缓存失效或全表扫描
+
+- id: SYS-013
+  name: 归档器死亡
+  layer: system
+  severity: P0
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["__health__"]
+    fields: []
+  sql_template: |
+    SELECT 1 FROM events WHERE event_type='__health__' AND timestamp > ?
+    LIMIT 1
+  description: 归档器心跳停止，事件无法持久化
+
+- id: SYS-014
+  name: 归档器心跳迟缓
+  layer: system
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["__health__"]
+    fields: []
+  sql_template: |
+    SELECT MAX(timestamp) as last_heartbeat FROM events
+    WHERE event_type='__health__' AND timestamp > ?
+    HAVING last_heartbeat < CAST(strftime('%s', 'now', '-10 minutes') AS REAL)
+  description: 归档器 10 分钟内无心跳，可能存在性能瓶颈
+
+- id: SYS-015
+  name: 探针监控中断
+  layer: system
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["__detach__"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='__detach__' AND timestamp > ?
+    GROUP BY system
+  description: 探针主动断开监控连接，可能是被业务系统拒绝
+
+- id: SYS-016
+  name: Windows 指标不可靠
+  layer: system
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["platform_snapshot"]
+    fields: ["platform_unreliable"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='platform_snapshot' AND timestamp > ?
+    AND json_extract(payload, '$.platform_unreliable') = 1
+    GROUP BY system
+  description: Windows 平台指标采集不完整，诊断精度受限
+
+- id: SYS-017
+  name: CPU 负荷高
+  layer: system
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["platform_snapshot"]
+    fields: ["load_avg_1m", "cpu_count"]
+  sql_template: |
+    SELECT system, json_extract(payload, '$.load_avg_1m') as load1,
+           json_extract(payload, '$.cpu_count') as cpus
+    FROM events WHERE event_type='platform_snapshot' AND timestamp > ?
+    AND json_extract(payload, '$.load_avg_1m') > 0
+    AND json_extract(payload, '$.cpu_count') > 0
+    AND json_extract(payload, '$.load_avg_1m') > json_extract(payload, '$.cpu_count') * 0.8
+    GROUP BY system
+  description: 1 分钟负载超过 CPU 核心数的 80%，CPU 可能成为瓶颈
+
+- id: SYS-018
+  name: CPU 持续过载
+  layer: system
+  severity: P0
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["platform_snapshot"]
+    fields: ["load_avg_5m", "cpu_count"]
+  sql_template: |
+    SELECT system, json_extract(payload, '$.load_avg_5m') as load5,
+           json_extract(payload, '$.cpu_count') as cpus
+    FROM events WHERE event_type='platform_snapshot' AND timestamp > ?
+    AND json_extract(payload, '$.load_avg_5m') > 0
+    AND json_extract(payload, '$.cpu_count') > 0
+    AND json_extract(payload, '$.load_avg_5m') > json_extract(payload, '$.cpu_count') * 1.2
+    GROUP BY system
+  description: 5 分钟负载超过 CPU 核心数的 120%，系统持续过载，需立即干预
+
+- id: SYS-019
+  name: CPU Load 异常飙升
+  layer: system
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["platform_snapshot"]
+    fields: ["load_avg_1m", "load_avg_5m"]
+  sql_template: |
+    SELECT system,
+      AVG(CASE WHEN timestamp > CAST(strftime('%s', 'now', '-5 minutes') AS REAL) THEN json_extract(payload, '$.load_avg_1m') END) as recent,
+      AVG(CASE WHEN timestamp <= CAST(strftime('%s', 'now', '-5 minutes') AS REAL) THEN json_extract(payload, '$.load_avg_1m') END) as earlier
+    FROM events WHERE event_type='platform_snapshot' AND timestamp > ?
+    AND json_extract(payload, '$.load_avg_1m') > 0
+    GROUP BY system HAVING recent > earlier * 3 AND recent > 2.0
+  description: CPU 1 分钟 load 短时间内暴增 3 倍以上，可能存在 CPU 风暴
+
+# ============================================================
+# 二、网络层（14 个）
+# ============================================================
+
+- id: NET-017
+  name: 网络不通（TCP 连接失败）
+  layer: network
+  severity: P0
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["llm_invoke", "tool_call"]
+    fields: ["layer_network.tcp_connected_ms"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type IN ('llm_invoke', 'tool_call') AND timestamp > ?
+    AND json_extract(payload, '$.layer_network.tcp_connected_ms') = 0
+    GROUP BY system
+  description: TCP 连接失败，网络不通或目标主机不可达
+
+- id: NET-018
+  name: 网络不通（DNS 解析失败）
+  layer: network
+  severity: P0
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["llm_invoke", "tool_call"]
+    fields: ["layer_network.dns_resolved"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type IN ('llm_invoke', 'tool_call') AND timestamp > ?
+    AND json_extract(payload, '$.layer_network.dns_resolved') = 0
+    GROUP BY system
+  description: DNS 解析失败，域名无法解析
+
+- id: NET-019
+  name: HTTP 4xx 客户端错误
+  layer: network
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["llm_invoke", "tool_call"]
+    fields: ["layer_network.status_code"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type IN ('llm_invoke', 'tool_call') AND timestamp > ?
+    AND json_extract(payload, '$.layer_network.status_code') BETWEEN 400 AND 499
+    GROUP BY system
+  description: HTTP 客户端错误频繁，可能是认证失败或参数错误
+
+- id: NET-020
+  name: HTTP 5xx 服务端错误
+  layer: network
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["llm_invoke", "tool_call"]
+    fields: ["layer_network.status_code"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type IN ('llm_invoke', 'tool_call') AND timestamp > ?
+    AND json_extract(payload, '$.layer_network.status_code') BETWEEN 500 AND 599
+    GROUP BY system
+  description: HTTP 服务端错误频繁，目标服务可能不稳定
+
+- id: NET-021
+  name: 特定 Host 频繁失败
+  layer: network
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["llm_invoke", "tool_call"]
+    fields: ["layer_network.target_host", "layer_network.status_code"]
+  sql_template: |
+    SELECT json_extract(payload, '$.layer_network.target_host') as host,
+           COUNT(*) as total,
+           SUM(CASE WHEN json_extract(payload, '$.layer_network.status_code') >= 400 THEN 1 ELSE 0 END) as errors
+    FROM events WHERE event_type IN ('llm_invoke', 'tool_call') AND timestamp > ?
+    AND json_extract(payload, '$.layer_network.target_host') IS NOT NULL
+    GROUP BY host HAVING errors * 1.0 / total > 0.3 AND total > 10
+  description: 特定目标主机错误率超过 30%，该服务可能存在问题
+
+- id: NET-022
+  name: 半开连接
+  layer: network
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["llm_invoke", "tool_call"]
+    fields: ["layer_network.tcp_connected_ms", "layer_network.status_code"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type IN ('llm_invoke', 'tool_call') AND timestamp > ?
+    AND json_extract(payload, '$.layer_network.tcp_connected_ms') > 0
+    AND json_extract(payload, '$.layer_network.status_code') IS NULL
+    GROUP BY system
+  description: TCP 连接成功但未收到 HTTP 响应，可能是半开连接
+
+- id: NET-023
+  name: TLS 握手超时
+  layer: network
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["llm_invoke", "tool_call"]
+    fields: ["layer_network.tls_handshake_ms"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type IN ('llm_invoke', 'tool_call') AND timestamp > ?
+    AND json_extract(payload, '$.layer_network.tls_handshake_ms') > 5000
+    GROUP BY system
+  description: TLS 握手耗时超过 5 秒，证书验证或网络可能有问题
+
+- id: NET-024
+  name: 网络分区（非 LLM 延迟）
+  layer: network
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["llm_invoke"]
+    fields: ["layer_network.tcp_connected_ms", "layer_llm.latency_ms"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='llm_invoke' AND timestamp > ?
+    AND json_extract(payload, '$.layer_network.tcp_connected_ms') = 0
+    AND json_extract(payload, '$.layer_llm.latency_ms') > 10000
+    GROUP BY system
+  description: 网络层连接失败导致 LLM 无响应，根因是网络分区而非模型延迟
+
+- id: NET-027
+  name: 连接池耗尽
+  layer: network
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["llm_invoke", "tool_call"]
+    fields: ["layer_network.target_host", "timestamp"]
+  sql_template: |
+    SELECT json_extract(payload, '$.layer_network.target_host') as host,
+           COUNT(*) as concurrent
+    FROM events WHERE event_type IN ('llm_invoke', 'tool_call') AND timestamp > ?
+    AND json_extract(payload, '$.layer_network.target_host') IS NOT NULL
+    GROUP BY host, strftime('%s', datetime(timestamp, 'unixepoch')) / 10
+    HAVING concurrent > 50
+  description: 同一目标主机并发连接数过高，可能连接池耗尽
+
+- id: NET-028
+  name: 冷启动延迟
+  layer: network
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["__register__", "llm_invoke"]
+    fields: ["timestamp"]
+  sql_template: |
+    SELECT system, 
+           (SELECT MIN(timestamp) FROM events WHERE event_type='llm_invoke' AND system = r.system AND timestamp > maxts) - maxts as startup_delay
+    FROM (SELECT system, MAX(timestamp) as maxts FROM events WHERE event_type='__register__' AND timestamp > ? GROUP BY system) r
+    WHERE startup_delay IS NOT NULL AND startup_delay > 30
+  description: 注册到首次业务事件间隔过长，冷启动延迟
+
+- id: NET-029
+  name: LLM Rate Limit（限流）
+  layer: network
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["llm_invoke", "tool_call"]
+    fields: ["layer_network.status_code"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type IN ('llm_invoke', 'tool_call') AND timestamp > ?
+    AND json_extract(payload, '$.layer_network.status_code') = 429
+    GROUP BY system
+  description: LLM API 返回 429，触发速率限制，需检查并发/配额/退避策略
+
+- id: NET-030
+  name: LLM 认证失败
+  layer: network
+  severity: P0
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["llm_invoke", "tool_call"]
+    fields: ["layer_network.status_code"]
+  sql_template: |
+    SELECT system, json_extract(payload, '$.layer_network.status_code') as code, COUNT(*) as cnt FROM events
+    WHERE event_type IN ('llm_invoke', 'tool_call') AND timestamp > ?
+    AND json_extract(payload, '$.layer_network.status_code') IN (401, 403)
+    GROUP BY system, code
+  description: LLM API 返回 401/403，API Key 过期或无权限，业务立即中断
+
+- id: NET-031
+  name: LLM 服务过载
+  layer: network
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["llm_invoke", "tool_call"]
+    fields: ["layer_network.status_code"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type IN ('llm_invoke', 'tool_call') AND timestamp > ?
+    AND json_extract(payload, '$.layer_network.status_code') = 503
+    GROUP BY system
+  description: LLM API 返回 503，服务端过载/维护，应切换降级或备用模型
+
+- id: NET-032
+  name: LLM 服务端内部错误
+  layer: network
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["llm_invoke", "tool_call"]
+    fields: ["layer_network.status_code"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type IN ('llm_invoke', 'tool_call') AND timestamp > ?
+    AND json_extract(payload, '$.layer_network.status_code') = 500
+    GROUP BY system
+  description: LLM API 返回 500，服务端内部错误，可能模型推理异常或后端崩溃
+
+# ============================================================
+# 三、模型层（10 个）
+# ============================================================
+
+- id: MDL-029
+  name: LLM 输出被截断
+  layer: model
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["llm_invoke"]
+    fields: ["layer_llm.finish_reason"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='llm_invoke' AND timestamp > ?
+    AND json_extract(payload, '$.layer_llm.finish_reason') LIKE '%length%'
+    GROUP BY system
+  description: LLM 输出因 token 限制被截断，可能需要增大 max_tokens
+
+- id: MDL-030
+  name: LLM 内容被过滤
+  layer: model
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["llm_invoke"]
+    fields: ["layer_llm.finish_reason"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='llm_invoke' AND timestamp > ?
+    AND json_extract(payload, '$.layer_llm.finish_reason') LIKE '%content_filter%'
+    GROUP BY system
+  description: LLM 输出被内容过滤器拦截，可能触发安全策略
+
+- id: MDL-031
+  name: LLM 空返回
+  layer: model
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["llm_invoke"]
+    fields: ["layer_llm.output_tokens", "layer_network.status_code"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='llm_invoke' AND timestamp > ?
+    AND json_extract(payload, '$.layer_llm.output_tokens') = 0
+    AND json_extract(payload, '$.layer_network.status_code') = 200
+    GROUP BY system
+  description: LLM 返回 200 但无输出内容，可能是提示词问题
+
+- id: MDL-032
+  name: 提示词臃肿
+  layer: model
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["llm_invoke"]
+    fields: ["layer_llm.input_tokens", "layer_llm.output_tokens"]
+  sql_template: |
+    SELECT system, AVG(json_extract(payload, '$.layer_llm.input_tokens') * 1.0 /
+           NULLIF(json_extract(payload, '$.layer_llm.output_tokens'), 0)) as ratio
+    FROM events WHERE event_type='llm_invoke' AND timestamp > ?
+    AND json_extract(payload, '$.layer_llm.output_tokens') > 0
+    GROUP BY system HAVING ratio > 20
+  description: 输入 token 远超输出，提示词可能过于冗长
+
+- id: MDL-033
+  name: 特定模型高延迟
+  layer: model
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["llm_invoke"]
+    fields: ["layer_llm.latency_ms", "layer_llm.model"]
+  sql_template: |
+    SELECT json_extract(payload, '$.layer_llm.model') as model,
+           COUNT(*) as cnt
+    FROM events WHERE event_type='llm_invoke' AND timestamp > ?
+    AND json_extract(payload, '$.layer_llm.latency_ms') > 5000
+    GROUP BY model
+  description: 特定模型响应延迟超过 5 秒
+
+- id: MDL-034
+  name: Latency 抖动异常
+  layer: model
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["llm_invoke"]
+    fields: ["layer_llm.latency_ms"]
+  sql_template: |
+    SELECT system,
+           AVG(json_extract(payload, '$.layer_llm.latency_ms')) as avg_lat,
+           MAX(json_extract(payload, '$.layer_llm.latency_ms')) - MIN(json_extract(payload, '$.layer_llm.latency_ms')) as lat_range
+    FROM events WHERE event_type='llm_invoke' AND timestamp > ?
+    GROUP BY system HAVING lat_range > avg_lat * 2
+  description: 延迟波动范围超过均值 2 倍，服务可能不稳定
+
+- id: MDL-035
+  name: 无限循环与思考瘫痪
+  layer: model
+  severity: P0
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["agent_step"]
+    fields: ["layer_agent.step_id"]
+  sql_template: |
+    SELECT system, json_extract(payload, '$.layer_agent.step_id') as sid, COUNT(*) as c
+    FROM events WHERE event_type='agent_step' AND timestamp > ?
+    GROUP BY system, sid HAVING c > 5
+  description: 同一决策步骤高频重复，疑似循环、震荡或缺乏终止条件
+
+- id: MDL-036
+  name: 推理成本失控
+  layer: model
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["llm_invoke"]
+    fields: ["layer_llm.input_tokens", "layer_llm.output_tokens"]
+  sql_template: |
+    SELECT system,
+           SUM(json_extract(payload, '$.layer_llm.input_tokens') +
+               json_extract(payload, '$.layer_llm.output_tokens')) as tokens,
+           COUNT(*) as cnt
+    FROM events WHERE event_type='llm_invoke' AND timestamp > ?
+    GROUP BY system HAVING tokens > 100000
+  description: Token 消耗超过阈值，检查循环调用、模型降级或长文本输入
+
+- id: MDL-037
+  name: 大规模注意力稀释
+  layer: model
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["llm_invoke"]
+    fields: ["layer_llm.input_tokens"]
+  sql_template: |
+    SELECT system, AVG(json_extract(payload, '$.layer_llm.input_tokens')) as avg_tokens
+    FROM events WHERE event_type='llm_invoke' AND timestamp > ?
+    GROUP BY system HAVING avg_tokens > 100000
+  description: 输入 token 持续接近模型上限，注意力可能稀释
+
+- id: MDL-038
+  name: 静默成本与空转浪费
+  layer: model
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["llm_invoke", "tool_call", "agent_step"]
+    fields: ["timestamp"]
+  sql_template: |
+    SELECT system, COUNT(*) as llm_cnt FROM events
+    WHERE event_type='llm_invoke' AND timestamp > ?
+    AND NOT EXISTS (
+      SELECT 1 FROM events e2
+      WHERE e2.system = events.system
+      AND e2.event_type IN ('tool_call', 'agent_step')
+      AND e2.timestamp > ?
+    )
+    GROUP BY system HAVING llm_cnt > 50
+  description: LLM 调用高频但无工具调用或 agent 步骤产出，可能空转
+
+# ============================================================
+# 四、工具层（14 个）
+# ============================================================
+
+- id: TLT-039
+  name: 工具调用超时
+  layer: tool
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["tool_call"]
+    fields: ["layer_tool.tool_status"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='tool_call' AND timestamp > ?
+    AND json_extract(payload, '$.layer_tool.tool_status') = 'timeout'
+    GROUP BY system
+  description: 工具调用超时，依赖服务可能不可用
+
+- id: TLT-040
+  name: 工具输入重复（缓存失效）
+  layer: tool
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["tool_call"]
+    fields: ["layer_tool.tool_input_hash"]
+  sql_template: |
+    SELECT system, json_extract(payload, '$.layer_tool.tool_input_hash') as h, COUNT(*) as cnt
+    FROM events WHERE event_type='tool_call' AND timestamp > ?
+    AND json_extract(payload, '$.layer_tool.tool_input_hash') IS NOT NULL
+    GROUP BY system, h HAVING cnt > 3
+  description: 相同工具输入 5 分钟内重复超过 3 次，缓存可能失效
+
+- id: TLT-051
+  name: LLM 重复输出（内容哈希重复）
+  layer: tool
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["llm_output"]
+    fields: ["layer_llm.output_text_hash", "layer_agent.session_id"]
+  sql_template: |
+    SELECT system, json_extract(payload, '$.layer_agent.session_id') as session_id,
+           json_extract(payload, '$.layer_llm.output_text_hash') as text_hash,
+           COUNT(*) as repeat_count,
+           MIN(timestamp) as first_seen,
+           MAX(timestamp) as last_seen
+    FROM events
+    WHERE event_type='llm_output'
+      AND timestamp > ?
+      AND json_extract(payload, '$.layer_llm.output_text_hash') IS NOT NULL
+    GROUP BY system, session_id, text_hash
+    HAVING repeat_count >= 3
+       AND (MAX(timestamp) - MIN(timestamp)) < 300
+  description: 同一 Session 内 5 分钟内相同输出内容重复超过 3 次，疑似 LLM 重复说话
+
+- id: TLT-052
+  name: 长时间无响应（思考停滞）
+  layer: model
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["agent_step_start", "agent_step_finish"]
+    fields: ["layer_agent.step_id", "layer_agent.session_id"]
+  sql_template: |
+    SELECT s.system, s.session_id, s.step_id,
+           s.timestamp as step_start_time,
+           (strftime('%s', 'now') - s.timestamp) as elapsed_seconds
+    FROM events s
+    WHERE s.event_type='agent_step_start'
+      AND s.timestamp > ?
+      AND NOT EXISTS (
+        SELECT 1 FROM events f
+        WHERE f.event_type='agent_step_finish'
+          AND f.system = s.system
+          AND json_extract(f.payload, '$.layer_agent.step_id') = json_extract(s.payload, '$.layer_agent.step_id')
+          AND f.timestamp > s.timestamp
+      )
+    HAVING elapsed_seconds > 120
+  description: Agent 步骤开始后超过 2 分钟未完成，疑似思考停滞或卡死
+
+- id: TLT-041
+  name: 工具 Latency 异常高
+  layer: tool
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["tool_call"]
+    fields: ["layer_tool.execution_ms"]
+  sql_template: |
+    SELECT system, json_extract(payload, '$.layer_tool.tool_name') as tool,
+           json_extract(payload, '$.layer_tool.execution_ms') as exec_ms
+    FROM events WHERE event_type='tool_call' AND timestamp > ?
+    AND json_extract(payload, '$.layer_tool.execution_ms') > 10000
+  description: 工具执行耗时超过 10 秒，即使成功也异常
+
+- id: TLT-042
+  name: 未知工具调用
+  layer: tool
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["tool_call"]
+    fields: ["layer_tool.tool_name"]
+  sql_template: |
+    SELECT system, json_extract(payload, '$.layer_tool.tool_name') as tool, COUNT(*) as cnt
+    FROM events WHERE event_type='tool_call' AND timestamp > ?
+    GROUP BY system, tool ORDER BY cnt DESC LIMIT 20
+  description: 检测到不在白名单中的工具调用 — 暂不启用（乾坤镜不做第三方工具围栏）
+
+- id: TLT-043
+  name: 工具成功但下游失败
+  layer: tool
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["tool_call", "error"]
+    fields: ["layer_tool.tool_status", "timestamp"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='error' AND timestamp > ?
+    AND json_extract(payload, '$.error_type') NOT LIKE '%test%'
+    AND EXISTS (
+      SELECT 1 FROM events e2
+      WHERE e2.system = events.system
+      AND e2.event_type = 'tool_call'
+      AND e2.timestamp > ?
+      AND json_extract(e2.payload, '$.layer_tool.tool_status') = 'success'
+    )
+    GROUP BY system
+  description: 工具调用成功但后续发生错误事件，可能存在下游依赖问题
+
+- id: TLT-044
+  name: 工具权限不足
+  layer: tool
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["error"]
+    fields: ["error_type"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='error' AND timestamp > ?
+    AND (json_extract(payload, '$.error_type') LIKE '%PermissionDenied%' OR json_extract(payload, '$.error_type') LIKE '%EPERM%')
+    GROUP BY system
+  description: 工具调用因权限不足失败
+
+- id: TLT-045
+  name: 工具调用格式错误
+  layer: tool
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["error"]
+    fields: ["error_type"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='error' AND timestamp > ?
+    AND (json_extract(payload, '$.error_type') LIKE '%format%' OR json_extract(payload, '$.error_type') LIKE '%invalid_argument%')
+    GROUP BY system
+  description: 工具调用参数格式错误
+
+- id: TLT-046
+  name: 工具选择不当
+  layer: tool
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["tool_call"]
+    fields: ["layer_tool.tool_name", "layer_tool.tool_status"]
+  sql_template: |
+    SELECT system, json_extract(payload, '$.layer_tool.tool_name') as tool, COUNT(*) as cnt
+    FROM events WHERE event_type='tool_call' AND timestamp > ?
+    AND json_extract(payload, '$.layer_tool.tool_status') = 'fail'
+    GROUP BY system, tool HAVING cnt >= 3
+  description: 工具频繁失败（3次以上），可能是选错工具或参数不当
+
+- id: TLT-047
+  name: 工具连续失败
+  layer: tool
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["tool_call"]
+    fields: ["layer_tool.tool_status", "layer_tool.tool_name"]
+  sql_template: |
+    SELECT system, json_extract(payload, '$.layer_tool.tool_name') as tool, COUNT(*) as fails
+    FROM events WHERE event_type='tool_call' AND timestamp > ?
+    AND json_extract(payload, '$.layer_tool.tool_status') = 'fail'
+    GROUP BY system, tool HAVING fails > 3
+  description: 同一工具 5 分钟内连续失败超过 3 次
+
+- id: TLT-048
+  name: 工具权限失控
+  layer: tool
+  severity: P0
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["tool_call"]
+    fields: ["layer_tool.tool_name"]
+  sql_template: |
+    SELECT system, json_extract(payload, '$.layer_tool.tool_name') as tool, COUNT(*) as cnt
+    FROM events WHERE event_type='tool_call' AND timestamp > ?
+    AND json_extract(payload, '$.layer_tool.tool_name') IN ('git_force_push', 'db_drop', 'rm_rf', 'chmod_777', 'eval')
+    GROUP BY system, tool
+  description: Agent 调用高危工具，需立即检查权限配置与 guardrail 拦截
+
+- id: TLT-049
+  name: 多工具协同困难
+  layer: tool
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["tool_call"]
+    fields: ["layer_tool.tool_name"]
+  sql_template: |
+    SELECT system, COUNT(DISTINCT json_extract(payload, '$.layer_tool.tool_name')) as tool_count
+    FROM events WHERE event_type='tool_call' AND timestamp > ?
+    GROUP BY system HAVING tool_count > 10
+  description: 工具调用种类过多，可能存在协同困难
+
+- id: TLT-050
+  name: 策划步骤冗余与无效劳动
+  layer: tool
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["agent_step"]
+    fields: ["layer_agent.step_id"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='agent_step' AND timestamp > ?
+    GROUP BY system HAVING cnt > 100
+  description: 策划步骤过多且无有效产出，可能存在冗余劳动
+
+# ============================================================
+# 五、Agent 层（15 个）
+# ============================================================
+
+- id: AGT-049
+  name: 预期事件缺失
+  layer: agent
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["expectation_check"]
+    fields: []
+  sql_template: |
+    SELECT system, expected_event FROM expectations
+    WHERE fulfilled=0 AND deadline < ?
+  description: 探针可能未覆盖该路径，或执行失败，或事件在异步/子进程中丢失
+
+- id: AGT-051
+  name: Session 管理混乱
+  layer: agent
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["agent_step", "llm_invoke"]
+    fields: ["layer_agent.session_id"]
+  sql_template: |
+    SELECT system, COUNT(DISTINCT json_extract(payload, '$.layer_agent.session_id')) as session_count
+    FROM events WHERE event_type IN ('agent_step', 'llm_invoke') AND timestamp > ?
+    AND json_extract(payload, '$.layer_agent.session_id') IS NOT NULL
+    GROUP BY system HAVING session_count > 20
+  description: Session ID 频繁跳变或为 NULL，会话管理可能混乱
+
+- id: AGT-052
+  name: Step 跳跃（步骤缺失）
+  layer: agent
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["agent_step"]
+    fields: ["layer_agent.step_id"]
+  sql_template: |
+    SELECT system, json_extract(payload, '$.layer_agent.step_id') as sid, COUNT(*) as cnt
+    FROM events WHERE event_type='agent_step' AND timestamp > ?
+    GROUP BY system, sid ORDER BY cnt DESC LIMIT 20
+  description: 步骤 ID 序列不连续，可能存在步骤缺失 — 暂不启用（需解析复合 step_id 做 gap 检测，当前 SQL 无法支持）
+
+- id: AGT-053
+  name: 决策黑盒
+  layer: agent
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["agent_step"]
+    fields: ["layer_agent.decision_summary"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='agent_step' AND timestamp > ?
+    AND (json_extract(payload, '$.layer_agent.decision_summary') IS NULL
+         OR LENGTH(json_extract(payload, '$.layer_agent.decision_summary')) < 10)
+    GROUP BY system
+  description: Agent 决策摘要为空或过短，决策过程不透明
+
+- id: AGT-054
+  name: 单 Session 步骤过多
+  layer: agent
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["agent_step"]
+    fields: ["layer_agent.session_id"]
+  sql_template: |
+    SELECT system, json_extract(payload, '$.layer_agent.session_id') as sid, COUNT(*) as cnt
+    FROM events WHERE event_type='agent_step' AND timestamp > ?
+    GROUP BY system, sid HAVING cnt > 100
+  description: 同一 Session 内步骤超过 100，可能陷入死循环
+
+- id: AGT-055
+  name: Step ID 重复（非循环）
+  layer: agent
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["agent_step"]
+    fields: ["layer_agent.step_id", "layer_agent.session_id"]
+  sql_template: |
+    SELECT system, json_extract(payload, '$.layer_agent.step_id') as sid,
+           json_extract(payload, '$.layer_agent.session_id') as session,
+           COUNT(*) as cnt
+    FROM events WHERE event_type='agent_step' AND timestamp > ?
+    GROUP BY system, sid, session HAVING cnt > 1
+  description: 同一 Session 内 Step ID 重复，可能非循环导致
+
+- id: AGT-056
+  name: 角色边界侵蚀
+  layer: agent
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["agent_step"]
+    fields: ["layer_agent.role"]
+  sql_template: |
+    SELECT system, json_extract(payload, '$.layer_agent.role') as role, COUNT(*) as cnt
+    FROM events WHERE event_type='agent_step' AND timestamp > ?
+    AND json_extract(payload, '$.layer_agent.role') IS NOT NULL
+    GROUP BY system, role
+  description: Agent 角色与事件类型不匹配，可能存在边界侵蚀 — 暂不启用（需角色/事件映射表，当前 Schema 无法支持）
+
+- id: AGT-057
+  name: 并发一致性冲突
+  layer: agent
+  severity: P0
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["agent_step", "llm_invoke"]
+    fields: ["layer_agent.session_id"]
+  sql_template: |
+    SELECT system, COUNT(DISTINCT json_extract(payload, '$.layer_agent.session_id')) as sessions
+    FROM events WHERE event_type IN ('agent_step', 'llm_invoke') AND timestamp > ?
+    GROUP BY system HAVING sessions > 5
+  description: 多 Session 事件串扰，可能存在并发一致性冲突
+
+- id: AGT-058
+  name: 多 Agent 通信开销爆炸
+  layer: agent
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["llm_invoke"]
+    fields: ["layer_llm.input_tokens", "layer_llm.output_tokens"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt,
+           SUM(json_extract(payload, '$.layer_llm.input_tokens') + json_extract(payload, '$.layer_llm.output_tokens')) as tokens
+    FROM events WHERE event_type='llm_invoke' AND timestamp > ?
+    GROUP BY system HAVING cnt > 100
+  description: LLM 调用频次和 Token 消耗呈 O(N²) 增长
+
+- id: AGT-059
+  name: 多 Agent 故障隔离失败
+  layer: agent
+  severity: P0
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["error"]
+    fields: ["system", "timestamp"]
+  sql_template: |
+    SELECT COUNT(DISTINCT system) as affected_systems, COUNT(*) as cnt
+    FROM events WHERE event_type='error' AND timestamp > ?
+    HAVING affected_systems > 2
+  description: 跨系统故障传播，单点故障影响多个 Agent
+
+- id: AGT-060
+  name: 任务分配不合理与负载失衡
+  layer: agent
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["agent_step"]
+    fields: ["system"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='agent_step' AND timestamp > ?
+    GROUP BY system HAVING cnt > (SELECT AVG(sub.cnt) FROM (SELECT COUNT(*) as cnt FROM events WHERE event_type='agent_step' AND timestamp > ? GROUP BY system) sub) * 2.5
+  description: 某系统 agent_step 远高于窗口均值（>2.5x），负载分配不均
+
+- id: AGT-061
+  name: 并行任务处理混乱
+  layer: agent
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["agent_step", "llm_invoke"]
+    fields: ["layer_agent.session_id"]
+  sql_template: |
+    SELECT system, COUNT(DISTINCT json_extract(payload, '$.layer_agent.session_id')) as sessions
+    FROM events WHERE event_type IN ('agent_step', 'llm_invoke') AND timestamp > ?
+    GROUP BY system HAVING sessions > 3
+  description: 多 Session 事件交织，并行任务处理可能混乱
+
+- id: AGT-062
+  name: 错误传播与级联崩盘
+  layer: agent
+  severity: P0
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["error"]
+    fields: ["error_type", "timestamp"]
+  sql_template: |
+    SELECT system, json_extract(payload, '$.error_type') as error_type, COUNT(*) as cnt FROM events
+    WHERE event_type='error' AND timestamp > ?
+    GROUP BY system, json_extract(payload, '$.error_type') HAVING cnt > 10
+  description: 同一错误类型频繁出现，可能引发级联崩盘
+
+- id: AGT-063
+  name: 开发失败恢复能力弱
+  layer: agent
+  severity: P0
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["error"]
+    fields: ["error_type"]
+  sql_template: |
+    SELECT system, json_extract(payload, '$.error_type') as error_type, COUNT(*) as cnt FROM events
+    WHERE event_type='error' AND timestamp > ?
+    GROUP BY system, json_extract(payload, '$.error_type') HAVING cnt > 5
+  description: 同一错误类型重复出现且无修复事件
+
+- id: AGT-064
+  name: 集群故障隔离与恢复失败
+  layer: agent
+  severity: P0
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["error", "system_crash"]
+    fields: ["system"]
+  sql_template: |
+    SELECT COUNT(DISTINCT system) as affected_systems
+    FROM events WHERE event_type IN ('error', 'system_crash') AND timestamp > ?
+    HAVING affected_systems > 3
+  description: 单点故障导致集群停滞，故障隔离失败
+
+# ============================================================
+# 六、记忆层（44 个）
+# ============================================================
+
+- id: MEM-065
+  name: 记忆召回为空
+  layer: memory
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["memory_retrieve"]
+    fields: ["layer_memory.results_count"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='memory_retrieve' AND timestamp > ?
+    AND json_extract(payload, '$.layer_memory.results_count') = 0
+    GROUP BY system
+  description: 记忆检索返回 0 条结果，索引可能为空或查询不匹配
+
+- id: MEM-066
+  name: 记忆查询重复（缓存未做）
+  layer: memory
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["memory_retrieve"]
+    fields: ["layer_memory.query_hash"]
+  sql_template: |
+    SELECT system, json_extract(payload, '$.layer_memory.query_hash') as h, COUNT(*) as cnt
+    FROM events WHERE event_type='memory_retrieve' AND timestamp > ?
+    AND json_extract(payload, '$.layer_memory.query_hash') IS NOT NULL
+    GROUP BY system, h HAVING cnt > 5
+  description: 相同查询 1 小时内重复超过 5 次，缓存可能未生效
+
+- id: MEM-067
+  name: 记忆相关度全部极低
+  layer: memory
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["memory_retrieve"]
+    fields: ["layer_memory.relevance_score"]
+  sql_template: |
+    SELECT system, AVG(json_extract(payload, '$.layer_memory.relevance_score')) as avg_score
+    FROM events WHERE event_type='memory_retrieve' AND timestamp > ?
+    AND json_extract(payload, '$.layer_memory.relevance_score') IS NOT NULL
+    GROUP BY system HAVING avg_score < 0.2
+  description: 所有检索结果相关度都低于 0.2，记忆库质量可能有问题
+
+- id: MEM-068
+  name: 记忆相关度全部极高
+  layer: memory
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["memory_retrieve"]
+    fields: ["layer_memory.relevance_score"]
+  sql_template: |
+    SELECT system, AVG(json_extract(payload, '$.layer_memory.relevance_score')) as avg_score
+    FROM events WHERE event_type='memory_retrieve' AND timestamp > ?
+    AND json_extract(payload, '$.layer_memory.relevance_score') IS NOT NULL
+    GROUP BY system HAVING avg_score > 0.95
+  description: 所有检索结果相关度都高于 0.95，可能缺乏多样性
+
+- id: MEM-069
+  name: 记忆写入失败（有读无写）
+  layer: memory
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["memory_retrieve", "memory_store"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as retrieve_cnt FROM events
+    WHERE event_type='memory_retrieve' AND timestamp > ?
+    AND NOT EXISTS (
+      SELECT 1 FROM events e2
+      WHERE e2.system = events.system
+      AND e2.event_type = 'memory_store'
+      AND e2.timestamp > ?
+    )
+    GROUP BY system HAVING retrieve_cnt > 10
+  description: 有记忆检索但无记忆存储事件，可能写入失败
+
+- id: MEM-070
+  name: Embedding 模型漂移
+  layer: memory
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["memory_retrieve"]
+    fields: ["layer_memory.embedding_model"]
+  sql_template: |
+    SELECT system, COUNT(DISTINCT json_extract(payload, '$.layer_memory.embedding_model')) as model_count
+    FROM events WHERE event_type='memory_retrieve' AND timestamp > ?
+    AND json_extract(payload, '$.layer_memory.embedding_model') IS NOT NULL
+    GROUP BY system HAVING model_count > 1
+  description: 同一系统使用多个 embedding 模型，可能导致检索不一致
+
+- id: MEM-071
+  name: 多轮对话查询理解偏差
+  layer: memory
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["memory_retrieve"]
+    fields: ["layer_memory.relevance_score"]
+  sql_template: |
+    SELECT system, AVG(json_extract(payload, '$.layer_memory.relevance_score')) as avg_score
+    FROM events WHERE event_type='memory_retrieve' AND timestamp > ?
+    AND json_extract(payload, '$.layer_memory.relevance_score') IS NOT NULL
+    GROUP BY system HAVING avg_score < 0.3
+  description: 多轮对话中检索相关度趋势下降，查询理解可能偏差
+
+- id: MEM-072
+  name: 记忆检索不精准
+  layer: memory
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["memory_retrieve"]
+    fields: ["layer_memory.relevance_score", "layer_memory.results_count"]
+  sql_template: |
+    SELECT system,
+           AVG(json_extract(payload, '$.layer_memory.relevance_score')) as avg_score,
+           AVG(json_extract(payload, '$.layer_memory.results_count')) as avg_count,
+           COUNT(*) as total
+    FROM events WHERE event_type='memory_retrieve' AND timestamp > ?
+    GROUP BY system HAVING avg_count > 10 AND total > 5
+  description: 召回数量多但相关度低，向量库可能漂移
+
+- id: MEM-073
+  name: 上下文污染与错误自我复制
+  layer: memory
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["memory_retrieve", "error"]
+    fields: ["timestamp"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='memory_retrieve' AND timestamp > ?
+    GROUP BY system HAVING cnt > 50
+  description: 错误 payload 被多次引用，可能存在上下文污染
+
+- id: MEM-074
+  name: 记忆时效性管理缺失
+  layer: memory
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["memory_retrieve"]
+    fields: ["layer_memory.memory_store"]
+  sql_template: |
+    SELECT system, json_extract(payload, '$.layer_memory.memory_store') as store,
+           MAX(timestamp) as last_retrieve
+    FROM events WHERE event_type='memory_retrieve'
+    GROUP BY system, store HAVING last_retrieve < ?
+  description: 记忆库超过 90 天未更新，可能过时
+
+- id: MEM-075
+  name: 上下文隔离失效
+  layer: memory
+  severity: P0
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["memory_retrieve"]
+    fields: ["layer_memory.chunk_id"]
+  sql_template: |
+    SELECT json_extract(payload, '$.layer_memory.chunk_id') as chunk,
+           COUNT(DISTINCT system) as systems
+    FROM events WHERE event_type='memory_retrieve' AND timestamp > ?
+    AND json_extract(payload, '$.layer_memory.chunk_id') IS NOT NULL
+    GROUP BY chunk HAVING systems > 1
+  description: 不同系统召回相同 chunk_id，存在上下文串扰风险
+
+- id: MEM-076
+  name: 记忆隐私泄露
+  layer: memory
+  severity: P0
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["memory_retrieve"]
+    fields: ["layer_memory.chunk_id"]
+  sql_template: |
+    SELECT json_extract(payload, '$.layer_memory.chunk_id') as chunk,
+           COUNT(DISTINCT system) as systems
+    FROM events WHERE event_type='memory_retrieve' AND timestamp > ?
+    AND json_extract(payload, '$.layer_memory.chunk_id') IS NOT NULL
+    GROUP BY chunk HAVING systems > 1
+  description: 跨用户 chunk_id 召回，可能存在隐私泄露 — 暂不启用（与 MEM-075 同逻辑已禁用，诊断依据需外部上下文）
+
+# ============================================================
+# 七、探针/底座自身（8 个）
+# ============================================================
+
+- id: PRB-077
+  name: 业务埋点质量差
+  layer: probe
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["__health__"]
+    fields: ["_incomplete"]
+  sql_template: |
+    SELECT
+      SUM(CASE WHEN json_extract(payload, '$._incomplete') = 1 THEN 1 ELSE 0 END) as incomplete,
+      COUNT(*) as total
+    FROM events
+    WHERE timestamp > ?
+    AND event_type = '__health__'
+    HAVING total > 0 AND (incomplete * 100.0 / total) > 10
+  description: 不完整标记事件占比超过 10%，埋点质量差
+
+- id: PRB-078
+  name: 探针持续丢包
+  layer: probe
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["__health__"]
+    fields: ["emit_drop_count_1m"]
+  sql_template: |
+    SELECT system, MAX(json_extract(payload, '$.emit_drop_count_1m')) as max_drops
+    FROM events WHERE event_type='__health__' AND timestamp > ?
+    AND json_extract(payload, '$.emit_drop_count_1m') > 0
+    GROUP BY system
+  description: 探针持续丢包，可能缓冲区满或磁盘慢
+
+- id: PRB-079
+  name: 哈希链损坏
+  layer: probe
+  severity: P0
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["__health__"]
+    fields: ["integrity"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='__health__' AND timestamp > ?
+    AND json_extract(payload, '$.integrity') = 'corrupted'
+    GROUP BY system
+  description: 哈希链完整性校验失败，数据可能被篡改
+
+- id: PRB-080
+  name: 哈希链重启频繁
+  layer: probe
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["__chain_reboot__"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='__chain_reboot__' AND timestamp > ?
+    GROUP BY system
+  description: 哈希链频繁重启，可能归档器不稳定
+
+- id: PRB-081
+  name: 探针缓冲区积压
+  layer: probe
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["__health__"]
+    fields: ["buffer_queue_size"]
+  sql_template: |
+    SELECT system, MAX(json_extract(payload, '$.buffer_queue_size')) as max_queue
+    FROM events WHERE event_type='__health__' AND timestamp > ?
+    GROUP BY system HAVING max_queue > 1000
+  description: 探针缓冲区持续增长，归档器可能消费慢
+
+- id: PRB-082
+  name: 探针自错误累积
+  layer: probe
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["__health__"]
+    fields: ["last_errors"]
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='__health__' AND timestamp > ?
+    AND json_extract(payload, '$.last_errors') IS NOT NULL
+    AND json_extract(payload, '$.last_errors') != '[]'
+    GROUP BY system
+  description: 探针自身错误频繁，可能影响数据质量
+
+- id: PRB-084
+  name: 探针 emit 率异常
+  layer: probe
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["__health__"]
+    fields: ["emit_success_count_1m"]
+  sql_template: |
+    SELECT system, json_extract(payload, '$.emit_success_count_1m') as emit_rate
+    FROM events WHERE event_type='__health__' AND timestamp > ?
+    AND json_extract(payload, '$.emit_success_count_1m') IS NOT NULL
+    AND json_extract(payload, '$.emit_success_count_1m') < 2
+    ORDER BY emit_rate ASC LIMIT 5
+  description: 探针 emit 成功率突降超过 50%
+
+# ============================================================
+# 八、数据质量（5 个）
+# ============================================================
+
+- id: DQT-086
+  name: 异常类型频率暴增
+  layer: data_quality
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["error"]
+    fields: ["error_type"]
+  sql_template: |
+    SELECT json_extract(payload, '$.error_type') as error_type, COUNT(*) as cnt FROM events
+    WHERE event_type='error' AND timestamp > ?
+    GROUP BY json_extract(payload, '$.error_type') HAVING cnt > 10
+  description: 同一错误类型 5 分钟内出现超过 10 次
+
+- id: DQT-087
+  name: 堆栈模式重复
+  layer: data_quality
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["error"]
+    fields: ["stack_trace"]
+  sql_template: |
+    SELECT json_extract(payload, '$.stack_trace') as stack_trace, COUNT(*) as cnt FROM events
+    WHERE event_type='error' AND timestamp > ?
+    AND json_extract(payload, '$.stack_trace') IS NOT NULL
+    GROUP BY json_extract(payload, '$.stack_trace') HAVING cnt > 5
+  description: 相同堆栈跟踪频繁出现，可能是同一根因
+
+- id: DQT-088
+  name: 数据摄入管道异常
+  layer: data_quality
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["data_ingest"]
+    fields: ["doc_count"]
+  sql_template: |
+    SELECT system, MAX(json_extract(payload, '$.doc_count')) - MIN(json_extract(payload, '$.doc_count')) as doc_range
+    FROM events WHERE event_type='data_ingest' AND timestamp > ?
+    GROUP BY system HAVING doc_range > 1000
+  description: 文档计数突增或突降，数据摄入管道可能异常
+
+- id: DQT-089
+  name: 跨会话记忆一致性丢失
+  layer: data_quality
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["memory_retrieve", "memory_preference"]
+    fields: ["layer_agent.session_id"]
+  sql_template: |
+    SELECT system, COUNT(DISTINCT json_extract(payload, '$.layer_agent.session_id')) as sessions
+    FROM events WHERE event_type IN ('memory_retrieve', 'memory_preference') AND timestamp > ?
+    GROUP BY system HAVING sessions > 3
+  description: Session 切换后偏好事件缺失，记忆一致性可能丢失
+
+- id: DQT-090
+  name: 多用户并发上下文一致性失败
+  layer: data_quality
+  severity: P0
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["agent_step", "llm_invoke"]
+    fields: ["layer_agent.session_id"]
+  sql_template: |
+    SELECT COUNT(DISTINCT system) as systems, COUNT(DISTINCT json_extract(payload, '$.layer_agent.session_id')) as sessions
+    FROM events WHERE event_type IN ('agent_step', 'llm_invoke') AND timestamp > ?
+    HAVING systems > 2 AND sessions > 10
+  description: 多用户事件交织，上下文一致性可能失败
+
+# ============================================================
+# 九、业务系统埋点（10 个，阶段三）
+# ============================================================
+
+- id: BIZ-091
+  name: Guardrail 触发频繁
+  layer: business
+  severity: P1
+  scope: observable
+  applicable: all
+  inference_mode: shadow
+  native_event: guardrail_trigger
+  shadow_event: error
+  shadow_sql: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='error' AND timestamp > ?
+    AND (json_extract(payload, '$.error_type') LIKE '%guardrail%' OR json_extract(payload, '$.error_type') LIKE '%blocked%')
+    GROUP BY system
+  depends:
+    event_types: ["guardrail_trigger"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='guardrail_trigger' AND timestamp > ?
+    GROUP BY system
+  description: Guardrail 拦截率过高，可能规则过于严格
+
+- id: BIZ-092
+  name: Plan 执行偏离
+  layer: business
+  severity: P2
+  scope: observable
+  applicable: all
+  inference_mode: shadow
+  native_event: plan
+  shadow_event: agent_step
+  shadow_sql: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='agent_step' AND timestamp > ?
+    GROUP BY system HAVING cnt > 50
+  depends:
+    event_types: ["plan", "milestone"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='plan' AND timestamp > ?
+    GROUP BY system
+  description: 实际执行路径偏离计划路径
+
+- id: BIZ-093
+  name: Fact Check 失败
+  layer: business
+  severity: P1
+  scope: observable
+  applicable: all
+  inference_mode: shadow
+  native_event: fact_check
+  shadow_event: error
+  shadow_sql: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='error' AND timestamp > ?
+    AND json_extract(payload, '$.error_type')='fact_mismatch'
+    GROUP BY system
+  depends:
+    event_types: ["fact_check"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='fact_check' AND timestamp > ?
+    AND json_extract(payload, '$.result') = 'fail'
+    GROUP BY system
+  description: 事实校验失败率超过阈值
+
+- id: BIZ-094
+  name: 意图识别偏差
+  layer: business
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["intent_parse"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='intent_parse' AND timestamp > ?
+    AND json_extract(payload, '$.confidence') < 0.5
+    GROUP BY system
+  description: 意图识别置信度低，可能需要优化 NLU 模型
+
+- id: BIZ-095
+  name: 多轮对话断裂
+  layer: business
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["conversation_turn"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='conversation_turn' AND timestamp > ?
+    AND json_extract(payload, '$.context_lost') = 1
+    GROUP BY system
+  description: 上下文丢失导致多轮对话断裂
+
+- id: BIZ-096
+  name: 工具编排混乱
+  layer: business
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["tool_orchestration"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='tool_orchestration' AND timestamp > ?
+    AND json_extract(payload, '$.order_violated') = 1
+    GROUP BY system
+  description: 工具调用顺序违反预期流程
+
+- id: BIZ-097
+  name: Agent 角色冲突
+  layer: business
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["role_switch"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='role_switch' AND timestamp > ?
+    GROUP BY system HAVING cnt > 5
+  description: 同一 Session 内角色频繁切换
+
+- id: BIZ-098
+  name: 目标达成率低下
+  layer: business
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["goal_complete"]
+    fields: []
+  sql_template: |
+    SELECT system,
+           SUM(CASE WHEN json_extract(payload, '$.achieved') = 1 THEN 1 ELSE 0 END) * 1.0 / COUNT(*) as rate
+    FROM events WHERE event_type='goal_complete' AND timestamp > ?
+    GROUP BY system HAVING rate < 0.5
+  description: 任务完成率低于 50%
+
+- id: BIZ-099
+  name: 用户满意度下滑
+  layer: business
+  severity: P1
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["user_feedback"]
+    fields: []
+  sql_template: |
+    SELECT system,
+           AVG(json_extract(payload, '$.satisfaction_score')) as avg_score
+    FROM events WHERE event_type='user_feedback' AND timestamp > ?
+    GROUP BY system HAVING avg_score < 3.0
+  description: 用户负面反馈率上升
+
+- id: BIZ-100
+  name: 知识库更新滞后
+  layer: business
+  severity: P2
+  scope: observable
+  applicable: all
+  depends:
+    event_types: ["knowledge_update"]
+    fields: []
+  sql_template: |
+    SELECT system, MAX(timestamp) as last_update
+    FROM events WHERE event_type='knowledge_update'
+    AND timestamp > ?
+    GROUP BY system HAVING last_update < CAST(strftime('%s', 'now', '-1 hours') AS REAL)
+  description: 知识库超过 1 小时未更新，可能引用过时信息
+
+# ============================================================
+# 十、土行孙 v0.7 专属诊断规则（10 个，2026-05-03 追加）
+# ============================================================
+
+- id: SYS-020
+  name: 捆仙索哈希熔断
+  layer: system
+  severity: P0
+  scope: observable
+  depends:
+    event_types: ["kunxiansuo.fuse"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='kunxiansuo.fuse'
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 1
+  description: 土行孙捆仙索核心插件文件完整性校验失败触发的全局熔断，防御能力暂时受限
+
+- id: SYS-021
+  name: 捆仙索文件篡改检测
+  layer: system
+  severity: P0
+  scope: observable
+  depends:
+    event_types: ["kunxiansuo.tamper"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='kunxiansuo.tamper'
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 1
+  description: 探测到土行孙捆仙索插件文件被未授权修改，系统完整性受损
+
+- id: SYS-022
+  name: 捆仙索防御能力降级
+  layer: system
+  severity: P1
+  scope: observable
+  depends:
+    event_types: ["kunxiansuo.degraded"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='kunxiansuo.degraded'
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 1
+  description: 土行孙捆仙索部分功能因外部条件退化为本地模式（如乾坤镜 DB 不可用、锚点文件缺失）
+
+- id: PRB-085
+  name: 锚点源降级
+  layer: probe
+  severity: P1
+  scope: observable
+  depends:
+    event_types: ["kunxiansuo.anchor_degraded"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='kunxiansuo.anchor_degraded'
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 1
+  description: 土行孙系统锚点 JSON 文件缺失，降级到环境变量或硬编码哈希，文件完整性校验强度降低
+
+- id: TLT-053
+  name: 捆仙索工具频繁拦截
+  layer: tool
+  severity: P1
+  scope: observable
+  depends:
+    event_types: ["kunxiansuo.tool_blocked"]
+    fields: []
+  sql_template: |
+    SELECT json_extract(payload, '$.layer_agent.session_id') as session_id,
+           COUNT(*) as cnt FROM events
+    WHERE event_type='kunxiansuo.tool_blocked'
+      AND timestamp > ?
+    GROUP BY session_id
+    HAVING cnt > 3
+  description: 某 Agent 会话在短时间窗口内被捆仙索多次拦截工具调用，可能存在恶意行为
+
+- id: TLT-054
+  name: 土行孙 Schema 错误高频
+  layer: tool
+  severity: P2
+  scope: observable
+  depends:
+    event_types: ["kunxiansuo.schema_error"]
+    fields: []
+  sql_template: |
+    SELECT json_extract(payload, '$.layer_agent.session_id') as session_id,
+           COUNT(*) as cnt FROM events
+    WHERE event_type='kunxiansuo.schema_error'
+      AND timestamp > ?
+    GROUP BY session_id
+    HAVING cnt > 5
+  description: LLM 调用土行孙工具时频繁传入不符合 Schema 的参数，建议调整 prompt 或检查工具定义
+
+- id: TLT-055
+  name: 土行孙工具自愈成功率异常
+  layer: tool
+  severity: P2
+  scope: observable
+  depends:
+    event_types: ["kunxiansuo.recovery"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as total,
+           SUM(CASE WHEN json_extract(payload, '$.success') = true THEN 1 ELSE 0 END) as success_cnt
+    FROM events
+    WHERE event_type='kunxiansuo.recovery'
+      AND timestamp > ?
+    GROUP BY system
+    HAVING total > 0 AND CAST(success_cnt AS REAL) / total < 0.5
+  description: 土行孙工具代替链中成功恢复的比例低于 50%，建议检查替代工具映射表
+
+- id: SYS-023
+  name: 土行孙沙箱入侵告警
+  layer: system
+  severity: P1
+  scope: observable
+  depends:
+    event_types: ["sandbox.blocked"]
+    fields: []
+  sql_template: |
+    SELECT json_extract(payload, '$.layer_agent.session_id') as session_id,
+           COUNT(*) as cnt FROM events
+    WHERE event_type='sandbox.blocked'
+      AND timestamp > ?
+    GROUP BY session_id
+    HAVING cnt > 2
+  description: Agent 尝试访问被土行孙沙箱保护的路径或执行受限命令，达到告警阈值
+
+- id: AGT-065
+  name: 土行孙上下文频繁强制裁剪
+  layer: agent
+  severity: P2
+  scope: observable
+  depends:
+    event_types: ["context.trimmed"]
+    fields: []
+  sql_template: |
+    SELECT json_extract(payload, '$.layer_agent.session_id') as session_id,
+           COUNT(*) as cnt FROM events
+    WHERE event_type='context.trimmed'
+      AND timestamp > ?
+    GROUP BY session_id
+    HAVING cnt > 5
+  description: 土行孙会话上下文超出模型限制导致多次强制截断，建议调整 max_tokens 或启用记忆摘要
+
+- id: PRB-086
+  name: 土行孙探针事件配对异常
+  layer: probe
+  severity: P1
+  scope: observable
+  depends:
+    event_types: ["__expect__"]
+    fields: []
+  sql_template: |
+    SELECT system,
+           COUNT(*) as unfulfilled_cnt FROM expectations
+    WHERE system='tusunsun'
+      AND fulfilled = 0
+      AND deadline > ?
+    GROUP BY system
+    HAVING unfulfilled_cnt >= 1
+  description: tool.execute 事件在规定时间内没有配对的 tool.result，可能存在工具执行超时或探针事件丢失
+
+# ============================================================
+# 十一、土行孙 v0.7 Phase 1 诊断加强（20 个，2026-05-03 追加）
+# ============================================================
+
+# --- 捆仙索安全层（+5） ---
+
+- id: SYS-024
+  name: 捆仙索反复熔断
+  layer: system
+  severity: P0
+  always_on: true
+  scope: observable
+  depends:
+    event_types: ["kunxiansuo.fuse"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='kunxiansuo.fuse'
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 2
+  description: 捆仙索在短时间窗口内反复触发熔断，核心防御能力不可用
+
+- id: SYS-025
+  name: 捆仙索安全系统恢复
+  layer: system
+  severity: P2
+  scope: observable
+  depends:
+    event_types: ["kunxiansuo.recovered"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='kunxiansuo.recovered'
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 1
+  description: 捆仙索从故障/熔断状态中恢复，记录恢复事件以监控安全系统稳定性
+
+- id: SYS-026
+  name: 捆仙索锚点完全丢失
+  layer: system
+  severity: P0
+  always_on: true
+  scope: observable
+  depends:
+    event_types: ["kunxiansuo.anchor_degraded"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='kunxiansuo.anchor_degraded'
+      AND json_extract(payload, '$.to_level') >= 3
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 1
+  description: 捆仙索锚点降级到极限（硬编码兜底），文件完整性校验强度最低
+
+- id: TLT-056
+  name: 重试链升级频繁
+  layer: tool
+  severity: P1
+  scope: observable
+  depends:
+    event_types: ["kunxiansuo.escalation"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='kunxiansuo.escalation'
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 3
+  description: 工具代替链频繁升级重试，表明底层工具反复失败
+
+- id: TLT-057
+  name: 工具自愈能力退化
+  layer: tool
+  severity: P2
+  scope: observable
+  depends:
+    event_types: ["kunxiansuo.recovery"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as total,
+           SUM(CASE WHEN json_extract(payload, '$.success') = true THEN 1 ELSE 0 END) as success_cnt
+    FROM events
+    WHERE event_type='kunxiansuo.recovery'
+      AND timestamp > ?
+    GROUP BY system
+    HAVING total > 5 AND CAST(success_cnt AS REAL) / total < 0.4
+  description: 工具代替链中成功恢复的比例低于 40%，自愈能力显著退化
+
+# --- 番天印记忆层（+6） ---
+
+- id: MEM-077
+  name: 记忆哈希链损坏
+  layer: memory
+  severity: P0
+  scope: observable
+  depends:
+    event_types: ["ying.hash_verify"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='ying.hash_verify'
+      AND json_extract(payload, '$.ok') = false
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 1
+  description: 番天印记忆哈希链校验失败，记忆完整性受损
+
+- id: MEM-078
+  name: 记忆合并异常
+  layer: memory
+  severity: P2
+  scope: observable
+  depends:
+    event_types: ["ying.consolidation"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='ying.consolidation'
+      AND json_extract(payload, '$.items_merged') = 0
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 1
+  description: 番天印记忆层合并操作无产出，跨层转换可能异常
+
+- id: MEM-079
+  name: 记忆缓存命中率低
+  layer: memory
+  severity: P2
+  scope: observable
+  depends:
+    event_types: ["ying.cache_hit"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as total,
+           SUM(CASE WHEN json_extract(payload, '$.hit') = false THEN 1 ELSE 0 END) as miss_cnt
+    FROM events
+    WHERE event_type='ying.cache_hit'
+      AND timestamp > ?
+    GROUP BY system
+    HAVING total > 10 AND CAST(miss_cnt AS REAL) / total > 0.8
+  description: 番天印记忆缓存未命中率超过 80%，缓存配置可能需要调整
+
+- id: MEM-080
+  name: 记忆召回持续为空
+  layer: memory
+  severity: P2
+  scope: observable
+  depends:
+    event_types: ["ying.retrieve"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='ying.retrieve'
+      AND json_extract(payload, '$.results_count') = 0
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 5
+  description: 番天印记忆召回连续 5 次以上无结果，索引或嵌入模型可能存在异常
+
+- id: MEM-081
+  name: TusunZip 压缩率退化
+  layer: memory
+  severity: P2
+  scope: observable
+  depends:
+    event_types: ["ying.tusunzip"]
+    fields: []
+  sql_template: |
+    SELECT system, AVG(json_extract(payload, '$.ratio')) as avg_ratio,
+           COUNT(*) as cnt
+    FROM events
+    WHERE event_type='ying.tusunzip'
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 3 AND avg_ratio < 0.3
+  description: TusunZip 压缩率连续低于 0.3，压缩效果显著退化
+
+- id: MEM-082
+  name: 记忆检索延迟高
+  layer: memory
+  severity: P2
+  scope: observable
+  depends:
+    event_types: ["ying.retrieve"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='ying.retrieve'
+      AND json_extract(payload, '$.latency_ms') > 1000
+      AND json_extract(payload, '$.results_count') > 0
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 1
+  description: 番天印记忆检索延迟超过 1 秒且有结果返回，检索性能告警
+
+# --- 沙箱层（+3） ---
+
+- id: SYS-027
+  name: 沙箱进程被杀
+  layer: system
+  severity: P0
+  always_on: true
+  scope: observable
+  depends:
+    event_types: ["sandbox.killed"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='sandbox.killed'
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 1
+  description: 土行孙沙箱子进程被杀，可能由 OOM Killer 或系统资源耗尽触发
+
+- id: SYS-028
+  name: 沙箱执行失败
+  layer: system
+  severity: P1
+  scope: observable
+  depends:
+    event_types: ["sandbox.result"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='sandbox.result'
+      AND json_extract(payload, '$.ok') = false
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 2
+  description: 沙箱执行频繁返回失败结果，沙箱内部或执行环境可能存在异常
+
+- id: SYS-029
+  name: 沙箱操作频率异常
+  layer: system
+  severity: P2
+  scope: observable
+  depends:
+    event_types: ["sandbox.execute"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='sandbox.execute'
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 50
+  description: 沙箱执行操作频率异常偏高，可能存在工具滥用或死循环
+
+# --- 健康与运营层（+4） ---
+
+- id: SYS-030
+  name: 健康端点故障
+  layer: system
+  severity: P1
+  scope: observable
+  depends:
+    event_types: ["health.fail"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='health.fail'
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 2
+  description: 健康检查端点连续故障，服务可用性受影响
+
+- id: SYS-031
+  name: 健康端点严重降级
+  layer: system
+  severity: P0
+  always_on: true
+  scope: observable
+  depends:
+    event_types: ["health.degraded"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='health.degraded'
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 1
+  description: 健康检查出现降级事件，核心服务能力受损需立即关注
+
+- id: AGT-066
+  name: 请求生命周期断裂
+  layer: agent
+  severity: P2
+  scope: observable
+  depends:
+    event_types: ["request.start", "request.end"]
+    fields: []
+  sql_template: |
+    SELECT system,
+           SUM(CASE WHEN event_type='request.start' THEN 1 ELSE 0 END) as start_cnt,
+           SUM(CASE WHEN event_type='request.end' THEN 1 ELSE 0 END) as end_cnt
+    FROM events
+    WHERE event_type IN ('request.start', 'request.end')
+      AND timestamp > ?
+    GROUP BY system
+    HAVING start_cnt > end_cnt + 3
+  description: 请求 start 事件明显多于 end 事件，存在请求无法正常完成的异常
+
+- id: MDL-039
+  name: LLM 空转（无工具调用）
+  layer: model
+  severity: P1
+  scope: observable
+  depends:
+    event_types: ["llm_invoke", "tool_call"]
+    fields: []
+  sql_template: |
+    SELECT system,
+           SUM(CASE WHEN event_type='llm_invoke' THEN 1 ELSE 0 END) as llm_cnt,
+           SUM(CASE WHEN event_type='tool_call' THEN 1 ELSE 0 END) as tool_cnt
+    FROM events
+    WHERE event_type IN ('llm_invoke', 'tool_call')
+      AND timestamp > ?
+    GROUP BY system
+    HAVING llm_cnt >= 3 AND tool_cnt = 0
+  description: LLM 多次调用但无工具调用跟进，可能存在推理循环或死锁
+
+# --- 错误模式层（+23） ---
+
+- id: MDL-040
+  name: 模型 API 密钥未配置
+  layer: model
+  severity: P0
+  always_on: true
+  scope: observable
+  depends:
+    event_types: ["error"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='error'
+      AND (json_extract(payload, '$.error_msg') LIKE '%No API key%'
+           OR json_extract(payload, '$.error_msg') LIKE '%no api key%'
+           OR json_extract(payload, '$.message') LIKE '%No API key%'
+           OR json_extract(payload, '$.message') LIKE '%no api key%')
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 1
+  description: 模型 API 密钥未配置或已失效，LLM 调用将全部失败
+
+- id: AGT-067
+  name: Agent 达到最大轮次
+  layer: agent
+  severity: P2
+  scope: observable
+  depends:
+    event_types: ["error"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) as cnt FROM events
+    WHERE event_type='error'
+      AND (json_extract(payload, '$.error_msg') LIKE '%Max turns%'
+           OR json_extract(payload, '$.error_msg') LIKE '%max turns%'
+           OR json_extract(payload, '$.message') LIKE '%Max turns%'
+           OR json_extract(payload, '$.message') LIKE '%max turns%')
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 1
+  description: Agent 达到最大推理轮次限制，任务被迫中止
+
+# ====================================================================
+# v0.11.9-alpha Phase 1: Always-On 实时告警规则（5 条）
+# 绕过 triage 30 分钟盲区，每次 archive flush 直通诊断
+# ====================================================================
+
+- id: SYS-032
+  name: Token 消耗突增
+  layer: system
+  severity: P1
+  always_on: true
+  scope: observable
+  depends:
+    event_types: ["llm_invoke"]
+    fields: []
+  sql_template: |
+    SELECT system,
+      SUM(CASE WHEN timestamp > CAST(strftime('%s', 'now', '-5 minutes') AS REAL) THEN json_extract(payload, '$.layer_llm.input_tokens') + json_extract(payload, '$.layer_llm.output_tokens') ELSE 0 END) AS recent_tokens,
+      AVG(CASE WHEN timestamp <= CAST(strftime('%s', 'now', '-5 minutes') AS REAL) THEN json_extract(payload, '$.layer_llm.input_tokens') + json_extract(payload, '$.layer_llm.output_tokens') ELSE NULL END) AS baseline_tokens
+    FROM events
+    WHERE event_type='llm_invoke'
+      AND timestamp > ?
+    GROUP BY system
+    HAVING recent_tokens > baseline_tokens * 3.0 AND baseline_tokens > 0 AND recent_tokens > 1000
+  description: 近 5 分钟 Token 消耗超过基准（近 60 分钟均值）的 3 倍，存在调用量异常突增
+
+- id: TLT-058
+  name: 危险工具调用
+  layer: tool
+  severity: P0
+  always_on: true
+  scope: observable
+  depends:
+    event_types: ["tool_call"]
+    fields: []
+  sql_template: |
+    SELECT system,
+           json_extract(payload, '$.layer_tool.tool_name') AS tool,
+           json_extract(payload, '$.layer_tool.tool_args') AS args,
+           json_extract(payload, '$.layer_tool.tool_result') AS result,
+           json_extract(payload, '$.layer_tool.tool_status') AS status,
+           json_extract(payload, '$.layer_tool.execution_ms') AS exec_ms,
+           timestamp
+    FROM events
+    WHERE event_type='tool_call'
+      AND json_extract(payload, '$.layer_tool.tool_name') IN ('rm', 'unlink', 'exec', 'sudo', 'rm_rf', 'git_force_push', 'db_drop', 'chmod_777', 'eval')
+      AND timestamp > ?
+    ORDER BY timestamp DESC
+    LIMIT 50
+  description: 检测到 Agent 调用了高风险系统命令或危险操作，可能造成不可逆影响
+
+- id: TLT-059
+  name: 工具副作用过大
+  layer: tool
+  severity: P2
+  always_on: true
+  scope: observable
+  depends:
+    event_types: ["tool_call", "agent_step"]
+    fields: []
+  sql_template: |
+    SELECT system,
+      SUM(CASE WHEN event_type='tool_call' THEN 1 ELSE 0 END) AS tool_cnt,
+      SUM(CASE WHEN event_type='agent_step' THEN 1 ELSE 0 END) AS step_cnt
+    FROM events
+    WHERE event_type IN ('tool_call', 'agent_step')
+      AND timestamp > ?
+    GROUP BY system
+    HAVING tool_cnt * 1.0 / NULLIF(step_cnt, 0) > 5.0
+  description: 工具调用次数超过 Agent 推理步数的 5 倍，工具使用密度过高（文档污染/权限失控前兆）
+
+- id: AGT-068
+  name: Step 序列循环
+  layer: agent
+  severity: P1
+  always_on: true
+  scope: observable
+  depends:
+    event_types: ["agent_step"]
+    fields: []
+  sql_template: |
+    SELECT system,
+      COUNT(DISTINCT json_extract(payload, '$.layer_agent.step_id')) * 1.0 / NULLIF(COUNT(*), 0) AS uniqueness
+    FROM events
+    WHERE event_type='agent_step'
+      AND timestamp > ?
+    GROUP BY system
+    HAVING uniqueness < 0.2 AND COUNT(*) >= 5
+  description: Agent 推理步骤 ID 去重率低于 20%，存在 step_id 高度重复的死循环迹象
+
+- id: AGT-069
+  name: Agent 长时间无产出
+  layer: agent
+  severity: P1
+  always_on: true
+  scope: observable
+  depends:
+    event_types: ["agent_event", "agent_step", "tool_call", "llm_invoke"]
+    fields: []
+  sql_template: |
+    SELECT system, MAX(timestamp) as last_seen
+    FROM events
+    WHERE timestamp > ?
+    GROUP BY system
+    HAVING MAX(timestamp) < CAST(strftime('%s', 'now', '-600 seconds') AS REAL)
+  description: 某个已注册系统的最近事件在 10 分钟以前，Agent 可能已失联或推理陷入停滞
+
+# ====================================================================
+# v0.11.9-alpha Phase 3: 土行孙 v0.8.3 新增 7 种事件类型的诊断规则（16 条）
+# 来源：docs/management/土行孙v0.8.3事件反射清单.md
+# 日期：2026-05-04
+# ====================================================================
+
+# --- 系统层：插件启动 / 熔断器 / 数据库故障 ---
+
+- id: SYS-033
+  name: 插件启动失败
+  layer: system
+  severity: P0
+  always_on: true
+  scope: observable
+  depends:
+    event_types: ["plugin.init_failed"]
+    fields: []
+  sql_template: |
+    SELECT system,
+           json_extract(payload, '$.layer_system.plugin_name') AS plugin,
+           COUNT(*) AS cnt
+    FROM events
+    WHERE event_type='plugin.init_failed'
+      AND timestamp > ?
+    GROUP BY system, json_extract(payload, '$.layer_system.plugin_name')
+    HAVING cnt >= 3
+  description: 同一插件在 5 分钟内启动失败 ≥ 3 次，插件可能配置错误或依赖缺失
+
+- id: SYS-034
+  name: 熔断器频繁切换
+  layer: system
+  severity: P1
+  scope: observable
+  depends:
+    event_types: ["circuit.state_change"]
+    fields: []
+  sql_template: |
+    SELECT system,
+           json_extract(payload, '$.layer_system.tool') AS tool,
+           COUNT(*) AS cnt
+    FROM events
+    WHERE event_type='circuit.state_change'
+      AND json_extract(payload, '$.layer_system.to_state') = 'OPEN'
+      AND timestamp > ?
+    GROUP BY system, json_extract(payload, '$.layer_system.tool')
+    HAVING cnt >= 3
+  description: 同一工具在 30 分钟内反复进入 OPEN 状态 ≥ 3 次，下游服务可能不稳定
+
+- id: SYS-035
+  name: 熔断器反复试探失败
+  layer: system
+  severity: P1
+  scope: observable
+  depends:
+    event_types: ["circuit.state_change"]
+    fields: []
+  sql_template: |
+    SELECT system,
+           json_extract(payload, '$.layer_system.tool') AS tool,
+           COUNT(*) AS cnt
+    FROM events
+    WHERE event_type='circuit.state_change'
+      AND json_extract(payload, '$.layer_system.from_state') = 'HALF_OPEN'
+      AND json_extract(payload, '$.layer_system.to_state') = 'OPEN'
+      AND timestamp > ?
+    GROUP BY system, json_extract(payload, '$.layer_system.tool')
+    HAVING cnt >= 2
+  description: HALF_OPEN → OPEN 说明试探恢复失败，工具可能已不可用
+
+- id: SYS-036
+  name: 数据库写入故障
+  layer: system
+  severity: P0
+  always_on: true
+  scope: observable
+  depends:
+    event_types: ["db.flush_error"]
+    fields: []
+  sql_template: |
+    SELECT system,
+           json_extract(payload, '$.layer_system.db_mode') AS mode,
+           COUNT(*) AS cnt
+    FROM events
+    WHERE event_type='db.flush_error'
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 1
+  description: 数据库 flush 操作失败，数据持久化中断，可能丢失诊断记录
+
+- id: SYS-037
+  name: 写入队列堆积
+  layer: system
+  severity: P1
+  scope: observable
+  depends:
+    event_types: ["db.flush_error"]
+    fields: []
+  sql_template: |
+    SELECT system,
+           MAX(CAST(json_extract(payload, '$.layer_system.queue_size') AS INTEGER)) AS max_queue
+    FROM events
+    WHERE event_type='db.flush_error'
+      AND timestamp > ?
+    GROUP BY system
+    HAVING max_queue > 1000
+  description: 数据库写入队列超过 1000，写入阻塞严重，可能磁盘 I/O 或 SQLite 锁竞争
+
+- id: SYS-038
+  name: 存储模式降级
+  layer: system
+  severity: P2
+  always_on: true
+  scope: observable
+  depends:
+    event_types: ["db.mode_degraded"]
+    fields: []
+  sql_template: |
+    SELECT system,
+           json_extract(payload, '$.layer_system.reason') AS reason,
+           json_extract(payload, '$.layer_system.mode') AS mode,
+           COUNT(*) AS cnt
+    FROM events
+    WHERE event_type='db.mode_degraded'
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 1
+  description: SQLite 降级为 JSONL 文件模式，数据一致性和查询能力下降，需立即排查 SQLite 状态
+
+# --- 记忆层：番天印只读模式 ---
+
+- id: MEM-083
+  name: 记忆只读模式
+  layer: memory
+  severity: P0
+  always_on: true
+  scope: observable
+  depends:
+    event_types: ["memory.readonly_entered"]
+    fields: []
+  sql_template: |
+    SELECT system,
+           json_extract(payload, '$.layer_system.reason') AS reason,
+           json_extract(payload, '$.layer_system.error_count') AS error_count,
+           COUNT(*) AS cnt
+    FROM events
+    WHERE event_type='memory.readonly_entered'
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 1
+  description: 番天印哈希链完整性校验失败，记忆进入只读模式，数据不可信需人工修复
+
+- id: MEM-084
+  name: 记忆频繁只读
+  layer: memory
+  severity: P1
+  scope: observable
+  depends:
+    event_types: ["memory.readonly_entered"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) AS cnt
+    FROM events
+    WHERE event_type='memory.readonly_entered'
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 2
+  description: 24 小时内记忆多次进入只读模式，存储介质可能存在持续问题
+
+# --- Agent 层：P0 推送执行故障 ---
+
+- id: AGT-070
+  name: P0 推送执行失败
+  layer: agent
+  severity: P0
+  always_on: true
+  scope: observable
+  depends:
+    event_types: ["push.action_failed"]
+    fields: []
+  sql_template: |
+    SELECT system,
+           json_extract(payload, '$.layer_system.fault_id') AS fault_id,
+           json_extract(payload, '$.layer_system.action') AS action,
+           json_extract(payload, '$.layer_system.error') AS error,
+           COUNT(*) AS cnt
+    FROM events
+    WHERE event_type='push.action_failed'
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 1
+  description: 乾坤镜 P0 诊断推送后，土行孙防御动作执行失败，诊断正确但防御未生效
+
+# --- 网络层：HTTP 错误监控 ---
+
+- id: NET-033
+  name: HTTP 5xx 高频错误
+  layer: network
+  severity: P1
+  scope: observable
+  depends:
+    event_types: ["http.error"]
+    fields: []
+  sql_template: |
+    SELECT system,
+           COUNT(*) AS error_cnt,
+           json_extract(payload, '$.layer_network.url') AS url
+    FROM events
+    WHERE event_type='http.error'
+      AND CAST(json_extract(payload, '$.layer_network.status_code') AS INTEGER) >= 500
+      AND timestamp > ?
+    GROUP BY system, json_extract(payload, '$.layer_network.url')
+    HAVING error_cnt >= 3
+  description: HTTP 5xx 错误高频出现，API 服务端可能故障或过载
+
+- id: NET-034
+  name: HTTP 路由配置错误
+  layer: network
+  severity: P2
+  scope: observable
+  depends:
+    event_types: ["http.error"]
+    fields: []
+  sql_template: |
+    SELECT system,
+           COUNT(*) AS cnt,
+           json_extract(payload, '$.layer_network.url') AS url
+    FROM events
+    WHERE event_type='http.error'
+      AND CAST(json_extract(payload, '$.layer_network.status_code') AS INTEGER) = 404
+      AND timestamp > ?
+    GROUP BY system, json_extract(payload, '$.layer_network.url')
+    HAVING cnt >= 5
+  description: HTTP 404 高频出现，可能存在路由配置错误或客户端请求了不存在的端点
+
+- id: NET-035
+  name: 飞书 API 限流
+  layer: network
+  severity: P1
+  scope: observable
+  depends:
+    event_types: ["http.error"]
+    fields: []
+  sql_template: |
+    SELECT system, COUNT(*) AS cnt
+    FROM events
+    WHERE event_type='http.error'
+      AND CAST(json_extract(payload, '$.layer_network.status_code') AS INTEGER) = 429
+      AND json_extract(payload, '$.layer_system.source_plugin') = 'feishu-adapter'
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 3
+  description: 飞书 API 返回 429 限流 ≥ 3 次，需检查飞书消息发送频率或调整退避策略
+
+# --- 模型层：缓存命中率监控 ---
+
+- id: MDL-041
+  name: 模型缓存命中率低
+  layer: model
+  severity: P2
+  scope: observable
+  depends:
+    event_types: ["llm_invoke"]
+    fields: []
+  sql_template: |
+    SELECT system,
+           SUM(CASE WHEN json_extract(payload, '$.layer_llm.cache_hit') = false THEN 1 ELSE 0 END) AS miss_cnt,
+           COUNT(*) AS total_cnt
+    FROM events
+    WHERE event_type='llm_invoke'
+      AND timestamp > ?
+    GROUP BY system
+    HAVING miss_cnt * 1.0 / NULLIF(total_cnt, 0) > 0.9 AND total_cnt >= 10
+  description: 超过 90% 的 LLM 调用未命中缓存，可能存在缓存策略失效或上下文变化频繁
+
+# --- 工具层：工具成功率 / 输入重复 ---
+
+- id: TLT-060
+  name: 工具输入循环重复
+  layer: tool
+  severity: P1
+  scope: observable
+  depends:
+    event_types: ["tool_call"]
+    fields: []
+  sql_template: |
+    SELECT system,
+           json_extract(payload, '$.layer_tool.tool_input_hash') AS input_hash,
+           json_extract(payload, '$.layer_tool.tool_name') AS tool,
+           COUNT(*) AS cnt
+    FROM events
+    WHERE event_type='tool_call'
+      AND json_extract(payload, '$.layer_tool.tool_input_hash') IS NOT NULL
+      AND timestamp > ?
+    GROUP BY system,
+             json_extract(payload, '$.layer_agent.session_id'),
+             json_extract(payload, '$.layer_tool.tool_input_hash')
+    HAVING cnt >= 5
+  description: 同一 session 内相同 tool_input_hash 出现 ≥ 5 次，存在工具调用循环风险
+
+- id: TLT-061
+  name: 工具成功率下降
+  layer: tool
+  severity: P2
+  scope: observable
+  depends:
+    event_types: ["tool_call"]
+    fields: []
+  sql_template: |
+    SELECT system,
+           SUM(CASE WHEN json_extract(payload, '$.layer_tool.tool_ok') = true OR json_extract(payload, '$.layer_tool.tool_status') = 'success' THEN 1 ELSE 0 END) AS ok_cnt,
+           SUM(CASE WHEN json_extract(payload, '$.layer_tool.tool_ok') = false OR json_extract(payload, '$.layer_tool.tool_status') = 'fail' THEN 1 ELSE 0 END) AS fail_cnt,
+           json_extract(payload, '$.layer_tool.tool_name') AS tool
+    FROM events
+    WHERE event_type='tool_call'
+      AND (json_extract(payload, '$.layer_tool.tool_ok') IS NOT NULL OR json_extract(payload, '$.layer_tool.tool_status') IS NOT NULL)
+      AND timestamp > ?
+    GROUP BY system, json_extract(payload, '$.layer_tool.tool_name')
+    HAVING fail_cnt * 1.0 / NULLIF(ok_cnt + fail_cnt, 0) > 0.5 AND (ok_cnt + fail_cnt) >= 10
+  description: 工具执行成功率低于 50%，工具可能已失效或环境异常
+
+# --- Agent 层：错误归因 ---
+
+- id: AGT-071
+  name: Agent 组件错误高频
+  layer: agent
+  severity: P2
+  scope: observable
+  depends:
+    event_types: ["error"]
+    fields: []
+  sql_template: |
+    SELECT system,
+           json_extract(payload, '$.component') AS component,
+           COUNT(*) AS cnt
+    FROM events
+    WHERE event_type='error'
+      AND json_extract(payload, '$.component') = 'haotian-lite'
+      AND timestamp > ?
+    GROUP BY system
+    HAVING cnt >= 5
+  description: haotian-lite 组件错误高频 ≥ 5 次，Agent 推理模块可能存在系统性问题

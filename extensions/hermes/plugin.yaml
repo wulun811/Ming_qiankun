@@ -1,0 +1,28 @@
+name: mingjing-probe
+version: "0.11.6"
+description: "Mingjing (Qiankun Lens) observability probe — automatically traces LLM calls, tool executions, and memory operations, writing to local JSONL hot-track for offline diagnosis"
+author: "Mingjing Team"
+kind: standalone
+requires_env:
+  - name: MING_HOME
+    description: "Mingjing data directory (default ~/.ming)"
+    secret: false
+  - name: MING_SYSTEM_NAME
+    description: "System identifier to distinguish monitored systems"
+    secret: false
+  - name: MING_CONTENT_MAX_LEN
+    description: "Maximum content capture length (0=unlimited, default 2000)"
+    secret: false
+  - name: MING_HOT_DIR
+    description: "Hot-track output directory (default ~/.ming/hot)"
+    secret: false
+hooks:
+  - on_session_start
+  - on_session_end
+  - pre_llm_call
+  - post_llm_call
+  - pre_api_request
+  - post_api_request
+  - pre_tool_call
+  - post_tool_call
+  - subagent_stop

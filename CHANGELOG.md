@@ -1,0 +1,165 @@
+# Changelog
+
+## [v0.11.9m] — 2026-05-05
+
+### Added
+- Probe management commands (`ming probe list` / `ming probe uninstall`)
+- Safe probe uninstall: backup → stop observation → DB cleanup → file cleanup → VACUUM
+- `--dry-run` mode previews uninstall without executing
+- `--keep-data` flag retains DB records while stopping observation
+- `--force` flag skips interactive confirmation
+- Protected systems guard (`__admin__`, `__self_health__`, `__host__`, `unknown`)
+
+### Changed
+- Version: 0.11.9-alpha → 0.11.9m
+
+## [v0.11.9-alpha] — 2026-05-05
+
+### Added
+- Diagnosis timeline replay (`ming replay --system X --since 1h`)
+- Environment-aware rule thresholds (container/VM/baremetal detection)
+- CPU% calculation in probe_platform via `/proc/stat` jiffies delta
+- `ming admin cleanup` command for stale events/diagnoses
+- Healthbeat independent thread in Hermes plugin
+- KNOWN_PROBES whitelist-based instance filtering (report + web dashboard)
+- QueryBridge: 7 new methods + unified `/api/query` entry + 4 quick endpoints + CLI extensions
+- Always-on mechanism for LIT diagnostics + 20 tusunsun diagnosis rules
+- TLT-058 diagnosis enhancement + SYS-004 adaptive thresholds
+- Resource footprint panel (web dashboard)
+- OpenClaw probe enhancements
+
+### Fixed
+- False Podman detection on bare-metal cgroups v2
+- `unknown` system fallback in diagnosis source → `mingjing`
+- Archiver self-measurement inflating CPU footprint in reports
+- Frontend displaying `__host__`/`unknown`/`all` as instance cards
+- Probe CPU showing 0.0% for `mingjing` system-level instance
+- Web dashboard export thread import caching (added importlib.reload)
+- `mingjing` not rendering as a card in web dashboard
+- 10 diagnosis rule false positives
+- 8 diagnosis rule false positives + orphan process cleanup
+- 5 diagnosis rule SQL bugs
+- LangChain adapter: langchain-core >= 1.0 compatibility (invoke entry patch)
+- LangChain adapter: filled 6 diagnostic gaps (session_id, cache_hit, error, agent_step, relevance, embedding)
+- Dashboard diagnosis caps display: verified 3 / inferred 9
+
+### Removed
+- PRB-083 ("探针离线") and DQT-085 ("数据质量问题-探针缺失") — flawed rules assuming all probes must be online
+- Triage Prism from frontend (replaced by instance card system)
+
+### Changed
+- BSL 1.1 licensing: free for orgs with annual revenue <$100K USD
+- Diseases.yaml rule count: 159 → 157
+- Report/frontend filtering: blacklist → KNOWN_PROBES whitelist
+- Documentation restructured for open-source release
+- Memory optimization across archiver and hot rail processing
+
+## [v0.11.6] — 2026-05-01
+
+### Added
+- Health center CLI: report reorder, ignore/archive/reset commands, instance list
+- Health center web: health reset / archive / ignore trinity + probe status
+- Hermes Agent: `./ming hermes-install` one-click installation + skill registration
+- Web: hash chain break alerts can be dismissed (fixed alert_key + dismiss API)
+- Hermes probe: independent healthbeat thread, `__anchor__` support
+- Hermes probe: synthetic agent_step, OS sampling, event name mapping, deep extract
+- Hermes probe: tool_input_hash + 4-prong strategy
+- Web: system card shows per-system diagnosis count
+- CLI: report added disease summary (dedup + inference chain), `dx list` shows cause
+- Package: probe directory, requirements.txt, user guide, .gitignore
+
+### Refactored
+- archiver.py 586→406 lines: split into schema/triage/score/util modules
+- cli.py + lit_lite.py split for code size compliance
+- CLI UX fixes: port handling, empty query, JSON consistency, time format
+- P3 code style cleanup + probe dead code removal
+- P2 performance/security/dead code optimization
+- P2 archiver 3 tool modules split + P1 full security hardening
+- P0/P1 full code audit: 28 P0 + 30 P1/P2 fixes
+
+### Changed
+- Code budget: archiver.py limit relaxed to <410 lines (atomic transaction boundary)
+- 5 test case fixes + cluster_archiver hash chain bug fix
+
+## [v0.11.5] — 2026-04-30
+
+### Added
+- OpenClaw probe: enhanced event coverage and adapter stability
+- Web dashboard: alert banner dismiss support + toast deduplication
+- `__health__` / `__register__` / `__touch__` synchronized write to events table
+
+### Fixed
+- SYS diagnosis rules: relaxed system filter + corrected field names
+- `data.json` added to .gitignore (auto-generated runtime artifact)
+
+## [v0.11.4] — 2026-04-30
+
+### Added
+- Full probe adapter coverage across all supported frameworks
+- Configurable content truncation for large payloads
+- End-to-end diagnosis pipeline: probe → archiver → diagnosis → web
+
+## [v0.11.3] — 2026-04-29
+
+### Added
+- opencode probe: enhanced event extraction, embedding, and diagnosis gaps
+- Diagnosis engine: improved rule matching and coverage
+
+### Performance
+- Backfill batch write: 36K records from 75min → 1-2min
+
+## [v0.11.1] — 2026-04-28~29
+
+### Added
+- Self-health detection system (Phase 1+2)
+- Remedy engine decoupled from diagnostics
+- Configuration management (Phase 3)
+- Migration system (Phase 4)
+- Privacy controls (Phase 5)
+- OTEL bidirectional translation hub
+
+### Fixed
+- 7 SQL schema issues in diseases.yaml (error_type → json_extract + JSON path fixes)
+- 14 P0/P1 security fixes (exit mechanism, etc.)
+- Code review fixes: obvious bugs + limit relaxations
+
+### Changed
+- **Project renamed: Cosmoscope → Mingjing** — env vars, paths, CLI, deployment files updated
+- Full code review: module structure optimization, redundancy cleanup, style unification
+- MCP → LIT naming migration across codebase
+- Web Dashboard filter enhancements
+
+## [v0.10.5] — 2026-04-29
+
+### Added
+- OTEL bidirectional translation hub implementation
+- Frontend alignment: web_exporter field completion, server.py version switching, new frontend activation
+- Frontend i18n missing fields + diagnosis table header translation
+
+### Docs
+- OTEL upgrade plan v1.0→v1.2 (3 revisions, expert feedback incorporated)
+- Data dictionary and build specification updates
+
+## [v0.10.3] — 2026-04-28
+
+### Added
+- Diagnosis enhancement Phase 1: 96 disease diagnosis & treatment list
+- Adapter Phase 2: field completion, eliminated hardcoding, unified payload builders
+- Benchmark: `bench_continuity.py` + test guide rewrite
+- Smoke test + report generator + frontend Config read-only display + README tuning guide
+- Archive success rate: 98% → 100%
+
+### Docs
+- Diagnosis enhancement plan v1.0→v2.3 (3 revisions, expert opinions incorporated)
+- Performance benchmark report (A: 15min×1000/s, B: 3min×5000/s)
+- Complete documentation supplement
+
+## [v0.10] — 2026-04-27
+
+### Added
+- M9: Open-source preparation complete
+- M10: Production environment verification passed
+
+### Fixed
+- Exit mechanism + 14 P0/P1 security issues
+- mcp_received.jsonl added to .gitignore

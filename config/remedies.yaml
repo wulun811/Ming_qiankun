@@ -1,0 +1,171 @@
+# remedies.yaml —— LIT 处方库（规划中 🚧）
+# 与 diseases.yaml 一一对应：每条诊断规则可配 tiered 处置方案
+# 
+# 状态：骨架已搭，执行层未落地
+#   - ✓ 处方数据格式（tiers: emergency/immediate/short-term/long-term）
+#   - ✓ 场景化覆盖（applies_when: environment/severity）
+#   - ~ 处方引擎（src/remedy_engine.py 骨架，待接通）
+#   - ✗ 自动执行机制（需 LIT 处方引擎接通 remedy_engine.py）
+# 
+# 完成条件：LIT 诊断完成事件订阅后，此文件通过 remedy_engine.py 自动加载
+#
+# 格式：YAML 列表，每个条目为一个处方方案
+
+- rule_id: AGT-051
+  name: 无限循环处置方案
+  version: 1
+  author: qiankun-core
+  tiers:
+    emergency:
+      summary: "立即终止进程，防止 token 无限消耗"
+      rationale: "每延迟 1 分钟多消耗约 $0.5-2.0（视模型而定）"
+      actions:
+        - type: process_kill
+          target: "{{ system }}"
+          signal: 9
+          dry_run: true
+          human_confirm: true
+    immediate:
+      summary: "强制设置 step 上限，阻断循环"
+      actions:
+        - type: config_patch
+          target_file: "agent_config.yaml"
+          patch:
+            path: "max_steps"
+            value: 50
+          dry_run: true
+          human_confirm: true
+    short_term:
+      summary: "检查 prompt 终止条件"
+      actions:
+        - type: prompt_review
+          check_items:
+            - "是否存在'继续直到完成'等开放式指令"
+            - "是否缺少明确的 break/return 条件"
+          reference_doc: "https://github.com/wulun811/Ming_qiankun/wiki/termination-patterns"
+    long_term:
+      summary: "重构 Agent 状态机，引入有向无环图约束"
+      actions:
+        - type: architecture_review
+          suggestion: "将线性 step 改为 DAG，强制拓扑排序"
+
+- rule_id: AGT-052
+  name: 工具调用死循环处置方案
+  version: 1
+  author: qiankun-core
+  tiers:
+    emergency:
+      summary: "立即终止工具调用链，防止 API 费用爆炸"
+      rationale: "工具调用通常涉及外部 API，费用不可控"
+      actions:
+        - type: process_kill
+          target: "{{ system }}"
+          signal: 9
+          dry_run: true
+          human_confirm: true
+    immediate:
+      summary: "设置工具调用次数上限"
+      actions:
+        - type: config_patch
+          target_file: "agent_config.yaml"
+          patch:
+            path: "max_tool_calls"
+            value: 20
+          dry_run: true
+          human_confirm: true
+    short_term:
+      summary: "检查工具返回格式是否导致重复调用"
+      actions:
+        - type: tool_review
+          check_items:
+            - "工具返回是否包含触发再次调用的关键词"
+            - "是否存在工具参数未正确解析的情况"
+
+- rule_id: MEM-065
+  name: 上下文窗口溢出处置方案
+  version: 1
+  author: qiankun-core
+  tiers:
+    immediate:
+      summary: "启用上下文截断，保留最近 N 轮对话"
+      actions:
+        - type: config_patch
+          target_file: "agent_config.yaml"
+          patch:
+            path: "max_context_turns"
+            value: 10
+          dry_run: true
+          human_confirm: true
+    short_term:
+      summary: "引入上下文摘要机制"
+      actions:
+        - type: architecture_review
+          suggestion: "使用滑动窗口 + 摘要策略，保留关键信息同时控制上下文大小"
+    long_term:
+      summary: "迁移到支持更大上下文窗口的模型"
+      actions:
+        - type: model_migration
+          suggestion: "评估 128K/200K 上下文模型的成本效益"
+
+- rule_id: SYS-001
+  name: 进程僵死处置方案
+  version: 1
+  author: qiankun-core
+  tiers:
+    emergency:
+      summary: "发送 SIGKILL 强制终止僵死进程"
+      rationale: "僵死进程占用资源且不响应任何信号"
+      actions:
+        - type: process_kill
+          target: "{{ system }}"
+          signal: 9
+          dry_run: true
+          human_confirm: true
+    immediate:
+      summary: "发送 SIGTERM 优雅终止"
+      actions:
+        - type: process_kill
+          target: "{{ system }}"
+          signal: 15
+          dry_run: true
+          human_confirm: true
+    short_term:
+      summary: "检查进程日志定位僵死原因"
+      actions:
+        - type: log_review
+          check_items:
+            - "检查是否有死锁或资源竞争"
+            - "检查是否有未处理的异常"
+
+# 场景化覆盖示例：生产环境保守方案
+- rule_id: AGT-051
+  name: 无限循环-生产环境保守方案
+  version: 1
+  author: qiankun-core
+  applies_when:
+    environment: production
+    severity: P0
+  tiers:
+    emergency:
+      summary: "生产环境禁止直接 kill，先触发熔断降级"
+      rationale: "生产环境直接终止可能影响下游服务"
+      actions:
+        - type: circuit_breaker
+          target: "{{ system }}"
+          action: "redirect_to_fallback_agent"
+          dry_run: true
+          human_confirm: true
+        - type: alert_webhook
+          channel: pagerduty
+          message: "P0 无限循环: {{ system }}"
+          dry_run: true
+    immediate:
+      summary: "限制资源消耗，不终止进程"
+      actions:
+        - type: resource_limit
+          target: "{{ system }}"
+          limits:
+            max_cpu: "50%"
+            max_memory: "1GB"
+          dry_run: true
+          human_confirm: true

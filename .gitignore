@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environment
+.env
+*.env
+.secrets
+.venv
+
+# Database & runtime
+hot/
+cold/
+ming.db
+ming.db-journal
+.bridge_buffer.jsonl
+bridge_buffer.jsonl
+*.pid
+*.log
+data.json
+triage_snapshot.json
+/*.jsonl
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Reports
+review_report.json
+rss_monitor_data.jsonl
+mcp_received.jsonl
+bridge_buffer.jsonl
+
+# Docker
+.dockerignore
+src/plugins/web_dashboard/data.json
+
+# Internal dev symlink
+~
+
+# Build artifacts
+dist/
+mingjing.egg-info/

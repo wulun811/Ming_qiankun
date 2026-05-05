@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+"""
+乾坤镜 v0.11.3 — 独立运行包入口
+用法:
+  ./ming start          # 启动归档器（后台守护进程）
+  ./ming stop           # 停止归档器
+  ./ming status         # 查看状态
+  ./ming dx list        # 列出诊断
+  ./ming triage run     # 运行分诊
+  ./ming web            # 启动 Web 目镜 (默认端口 18080)
+  ./ming web --port 9090 # 启动 Web 目镜 (自定义端口)
+"""
+
+import sys
+import os
+
+# 添加 src 到路径
+src_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
+if src_dir not in sys.path:
+    sys.path.insert(0, src_dir)
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("用法: ./ming <command> [args...]")
+        print("命令: start, stop, status, dx, triage, web, health, query")
+        sys.exit(1)
+
+    cmd = sys.argv[1]
+
+    if cmd in ("start", "stop"):
+        # start/stop 使用 ming.py（守护进程管理）
+        ming_py = os.path.join(src_dir, "ming.py")
+        os.execv(sys.executable, [sys.executable, ming_py, cmd] + sys.argv[2:])
+    else:
+        # 其他命令使用 cli.py
+        cli_py = os.path.join(src_dir, "cli.py")
+        os.execv(sys.executable, [sys.executable, cli_py] + sys.argv[1:])
+
+
+if __name__ == "__main__":
+    main()

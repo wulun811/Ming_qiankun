@@ -1,0 +1,50 @@
+rules:
+  - id: P001
+    name: "compilation_error_resolvable"
+    description: "编译错误通常可通过修复依赖解决"
+    condition:
+      event_type: "tool_fail"
+      payload.error: "contains('undefined reference')"
+    action: "suggest_fix"
+    confidence: 0.92
+    suggestion: "检查链接库是否完整，运行 ldconfig 刷新缓存"
+
+  - id: P002
+    name: "timeout_retry_works"
+    description: "超时问题重试通常有效"
+    condition:
+      event_type: "timeout"
+      payload.timeout_ms: "> 5000"
+    action: "suggest_retry"
+    confidence: 0.85
+    suggestion: "增加超时时间或增加重试机制"
+
+  - id: P003
+    name: "schema_missing_field"
+    description: "Schema 缺少字段"
+    condition:
+      event_type: "schema_fail"
+      payload.error: "contains('missing field')"
+    action: "suggest_fix"
+    confidence: 0.88
+    suggestion: "检查 schema 定义，补充缺失字段"
+
+  - id: P004
+    name: "cost_spike_high_tokens"
+    description: "Token 消耗突增"
+    condition:
+      event_type: "cost_spike"
+      payload.prompt_tokens: "> 32000"
+    action: "alert"
+    confidence: 0.90
+    suggestion: "检查 prompt 长度，考虑截断或分批处理"
+
+  - id: P005
+    name: "rate_limit_retry"
+    description: "限流可通过重试解决"
+    condition:
+      event_type: "tool_fail"
+      payload.error: "contains('rate limit')"
+    action: "suggest_retry"
+    confidence: 0.80
+    suggestion: "等待后重试，或降低请求频率"

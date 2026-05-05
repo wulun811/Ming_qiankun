@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>乾坤镜 · 体检中心</title>
+<style>
+:root {
+  --bg-deep: #07070d;
+  --bg-panel: #0e0e16;
+  --glass-bg: rgba(18, 18, 28, 0.55);
+  --glass-bg-hover: rgba(24, 24, 38, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --glass-border-hover: rgba(255, 255, 255, 0.10);
+  --text-primary: #e8ecf1;
+  --text-secondary: #8b92a8;
+  --text-muted: #5a6078;
+  --accent-teal: #00d4aa;
+  --accent-purple: #7c3aed;
+  --accent-amber: #ffb224;
+  --accent-red: #ff2d55;
+  --accent-orange: #ff9500;
+  --accent-yellow: #ffcc00;
+  --accent-green: #34c759;
+  --accent-blue: #5ac8fa;
+  --font-mono: "JetBrains Mono", "SF Mono", "Consolas", "Courier New", monospace;
+  --font-sans: "Inter", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --shadow-md: 0 8px 24px rgba(0,0,0,0.4);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  min-height: 100vh;
+  padding: 20px 24px 40px;
+  -webkit-font-smoothing: antialiased;
+}
+
+@keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.5} }
+@keyframes fade-in { from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)} }
+@keyframes card-pulse { 0%,100%{border-color:rgba(255,45,85,0.3)}50%{border-color:rgba(255,45,85,0.7)} }
+@keyframes spin { to{transform:rotate(360deg)} }
+
+.header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--glass-border); animation:fade-in 0.3s ease-out; }
+.brand h1 { font-size:22px; font-weight:700; background:linear-gradient(135deg,var(--accent-teal),var(--accent-blue)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+.status-bar { display:flex; align-items:center; gap:12px; }
+.dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+.dot.online { background:var(--accent-teal); animation:pulse 2s infinite; }
+.dot.offline { background:var(--accent-red); }
+
+.btn { background:transparent; border:1px solid var(--glass-border); color:var(--accent-teal); padding:6px 14px; border-radius:var(--radius-md); cursor:pointer; font-family:var(--font-mono); font-size:14px; transition:all 0.2s; }
+.btn:hover { border-color:var(--accent-teal); background:rgba(0,212,170,0.08); }
+.btn.small { padding:3px 10px; font-size:12px; }
+.btn.reset-btn { color:var(--accent-green); border-color:rgba(52,199,89,0.3); }
+.btn.reset-btn:hover { border-color:var(--accent-green); background:rgba(52,199,89,0.08); }
+.btn.reset-btn.disabled { opacity:0.3; cursor:not-allowed; pointer-events:none; }
+
+/* Alert Banner */
+.alert-banner { display:none; padding:10px 16px; background:rgba(255,45,85,0.08); border:1px solid rgba(255,45,85,0.25); border-radius:var(--radius-md); color:var(--accent-red); font-family:var(--font-mono); font-size:14px; align-items:center; gap:10px; margin-bottom:16px; }
+.alert-banner.show { display:flex; }
+.alert-dismiss-btn { background:rgba(255,149,0,0.15); border:1px solid rgba(255,149,0,0.3); color:var(--accent-amber); cursor:pointer; border-radius:3px; font-size:11px; padding:1px 6px; margin-left:6px; transition:background 0.2s; }
+.alert-dismiss-btn:hover { background:rgba(255,149,0,0.3); }
+
+/* Global Overview */
+.overview-bar { display:flex; gap:24px; padding:12px 16px; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-md); margin-bottom:16px; font-family:var(--font-mono); font-size:14px; align-items:center; flex-wrap:wrap; }
+.overview-bar .sep { color:var(--text-muted); opacity:0.3; }
+.overview-bar .val { color:var(--text-primary); font-weight:500; }
+.overview-bar .hl0 { color:var(--accent-green); }
+.overview-bar .hl1 { color:var(--accent-yellow); }
+.overview-bar .hl2 { color:var(--accent-orange); }
+.overview-bar .hl3 { color:var(--accent-red); }
+
+/* Instance Card Grid */
+.instance-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(360px, 1fr)); gap:16px; margin-bottom:16px; }
+
+.inst-card { background:var(--glass-bg); border:2px solid var(--glass-border); border-radius:var(--radius-lg); padding:16px; cursor:pointer; transition:border-color 0.2s,box-shadow 0.2s; position:relative; animation:fade-in 0.4s ease-out both; }
+.inst-card:hover { border-color:var(--glass-border-hover); box-shadow:0 4px 12px rgba(0,0,0,0.3); }
+.inst-card.critical { border-color:var(--accent-red); animation:card-pulse 2s infinite; }
+.inst-card.warning { border-color:var(--accent-orange); }
+
+.inst-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.inst-name { font-family:var(--font-mono); font-size:16px; font-weight:600; color:var(--text-primary); }
+.inst-meta { font-family:var(--font-mono); font-size:12px; color:var(--text-muted); margin-bottom:10px; }
+.inst-meta span { margin-right:12px; }
+.inst-divider { border:none; border-top:1px solid var(--glass-border); margin:8px 0; }
+
+/* Health Badge */
+.hl-badge { display:inline-flex; align-items:center; gap:4px; padding:2px 10px; border-radius:12px; font-size:12px; font-weight:600; font-family:var(--font-mono); }
+.hl-badge.healthy { background:rgba(40,167,69,0.15); color:var(--accent-green); }
+.hl-badge.sub_healthy { background:rgba(255,193,7,0.15); color:var(--accent-yellow); }
+.hl-badge.warning { background:rgba(255,149,0,0.15); color:var(--accent-orange); }
+.hl-badge.critical { background:rgba(220,53,69,0.15); color:var(--accent-red); animation:pulse 2s infinite; }
+
+.inst-healthy { color:var(--text-muted); font-size:14px; padding:4px 0; }
+.inst-healthy .ok { color:var(--accent-green); }
+
+/* Disease Rows (inside card) */
+.disease-row { display:flex; align-items:center; gap:10px; padding:6px 0; font-family:var(--font-mono); font-size:13px; border-bottom:1px solid rgba(255,255,255,0.03); }
+.disease-row:last-child { border-bottom:none; }
+.disease-row .sev-bar { width:4px; height:24px; border-radius:2px; flex-shrink:0; }
+.disease-row .sev-bar.P0 { background:var(--accent-red); }
+.disease-row .sev-bar.P1 { background:var(--accent-orange); }
+.disease-row .sev-bar.P2 { background:var(--accent-yellow); }
+.disease-row .dx-name { flex:1; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.disease-row .dx-conf { width:40px; text-align:right; color:var(--text-secondary); font-size:12px; }
+.disease-row .dx-time { width:70px; text-align:right; color:var(--text-muted); font-size:12px; }
+.disease-row .dx-count { width:55px; text-align:right; color:var(--text-muted); font-size:12px; }
+.disease-row.dismissed { opacity:0.4; text-decoration:line-through; }
+
+.expand-btn { display:block; text-align:center; margin-top:10px; padding:6px; color:var(--accent-teal); font-family:var(--font-mono); font-size:13px; cursor:pointer; border-radius:var(--radius-sm); transition:background 0.2s; }
+.expand-btn:hover { background:rgba(0,212,170,0.06); }
+
+/* Expanded Detail */
+.detail-panel { display:none; padding-top:10px; border-top:1px solid var(--glass-border); margin-top:10px; max-height:60vh; overflow-y:auto; }
+.detail-panel.open { display:block; animation:fade-in 0.3s ease-out; }
+.detail-panel::-webkit-scrollbar { width:4px; }
+.detail-panel::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.08); border-radius:2px; }
+
+.detail-header { font-family:var(--font-mono); font-size:12px; color:var(--text-muted); margin-bottom:8px; }
+
+.dx-detail { background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); border-radius:var(--radius-md); padding:12px; margin-bottom:12px; position:relative; }
+.dx-detail::before { content:""; position:absolute; left:0; top:0; bottom:0; width:4px; border-radius:4px 0 0 4px; }
+.dx-detail.p0::before { background:var(--accent-red); }
+.dx-detail.p1::before { background:var(--accent-orange); }
+.dx-detail.p2::before { background:var(--accent-yellow); }
+
+.dx-detail .dx-title { font-size:15px; font-weight:600; color:var(--text-primary); margin-bottom:8px; font-family:var(--font-mono); }
+.dx-detail .dx-sev { font-size:12px; padding:1px 6px; border-radius:4px; margin-left:8px; font-weight:700; }
+.dx-detail .dx-sev.P0 { background:rgba(255,45,85,0.15); color:var(--accent-red); }
+.dx-detail .dx-sev.P1 { background:rgba(255,149,0,0.15); color:var(--accent-orange); }
+.dx-detail .dx-sev.P2 { background:rgba(255,204,0,0.15); color:var(--accent-yellow); }
+
+.dx-detail .conf-bar-wrap { display:flex; align-items:center; gap:8px; margin:8px 0; }
+.dx-detail .conf-bar { flex:1; height:6px; background:rgba(255,255,255,0.05); border-radius:3px; overflow:hidden; }
+.dx-detail .conf-fill { height:100%; border-radius:3px; transition:width 0.5s; }
+.dx-detail .conf-fill.P0 { background:var(--accent-red); }
+.dx-detail .conf-fill.P1 { background:var(--accent-orange); }
+.dx-detail .conf-fill.P2 { background:var(--accent-yellow); }
+.dx-detail .conf-pct { font-family:var(--font-mono); font-size:13px; font-weight:600; width:42px; text-align:right; }
+
+.dx-detail .dx-meta-row { display:flex; gap:20px; font-family:var(--font-mono); font-size:12px; color:var(--text-muted); margin:8px 0; flex-wrap:wrap; }
+.dx-detail .dx-meta-row span { display:inline-flex; gap:4px; }
+.dx-detail .dx-meta-row .lbl { color:var(--text-muted); }
+.dx-detail .dx-meta-row .val { color:var(--text-secondary); }
+
+.dx-detail .dx-section { margin-top:10px; }
+.dx-detail .dx-section-title { font-size:13px; font-weight:600; color:var(--text-secondary); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.05em; }
+.dx-detail .dx-evidence-item { font-family:var(--font-mono); font-size:13px; color:var(--text-muted); padding:4px 0; border-bottom:1px solid rgba(255,255,255,0.02); }
+.dx-detail .dx-evidence-item:last-child { border-bottom:none; }
+
+.dx-detail .dx-remedy-tiers { margin-top:8px; }
+.dx-detail .dx-remedy-tier { padding:6px 0; font-size:13px; }
+.dx-detail .dx-remedy-tier .tier-label { font-weight:600; font-family:var(--font-mono); }
+.dx-detail .dx-remedy-tier .tier-label.emergency { color:var(--accent-red); }
+.dx-detail .dx-remedy-tier .tier-label.immediate { color:var(--accent-orange); }
+.dx-detail .dx-remedy-tier .tier-label.short_term { color:var(--accent-yellow); }
+.dx-detail .dx-remedy-tier .tier-label.long_term { color:var(--accent-blue); }
+.dx-detail .dx-remedy-tier .tier-summary { color:var(--text-secondary); margin-left:4px; }
+.dx-detail .dx-no-remedy { color:var(--text-muted); font-size:13px; font-style:italic; }
+
+.dx-detail .dx-actions { display:flex; gap:8px; margin-top:12px; padding-top:10px; border-top:1px solid var(--glass-border); }
+.dx-detail .dx-actions button { background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); color:var(--text-secondary); padding:4px 12px; border-radius:4px; cursor:pointer; font-size:13px; font-family:var(--font-mono); transition:all 0.2s; }
+.dx-detail .dx-actions button:hover { border-color:var(--accent-teal); color:var(--accent-teal); }
+.dx-detail .dx-actions button.danger:hover { border-color:var(--accent-red); color:var(--accent-red); }
+.dx-detail .dx-actions button.restore:hover { border-color:var(--accent-green); color:var(--accent-green); }
+
+.archived-section { margin-top:12px; padding-top:10px; border-top:1px solid var(--glass-border); }
+.archived-section .arch-trigger { display:flex; align-items:center; gap:6px; color:var(--text-muted); font-family:var(--font-mono); font-size:13px; cursor:pointer; padding:4px 0; transition:color 0.2s; }
+.archived-section .arch-trigger:hover { color:var(--text-secondary); }
+.archived-section .arch-trigger .arrow { transition:transform 0.2s; display:inline-block; }
+.archived-section .arch-trigger.open .arrow { transform:rotate(90deg); }
+.archived-body { display:none; padding:8px 0; }
+.archived-body.open { display:block; }
+.archived-row { display:flex; align-items:center; gap:10px; padding:5px 0; font-family:var(--font-mono); font-size:12px; color:var(--text-muted); border-bottom:1px solid rgba(255,255,255,0.02); opacity:0.6; }
+.archived-row .arch-label { background:rgba(255,255,255,0.05); padding:1px 6px; border-radius:3px; font-size:10px; color:var(--text-muted); flex-shrink:0; }
+.archived-row .arch-name { flex:1; }
+.archived-row .arch-btn { background:none; border:1px solid rgba(255,255,255,0.08); color:var(--accent-teal); padding:2px 8px; border-radius:3px; cursor:pointer; font-family:var(--font-mono); font-size:11px; transition:all 0.2s; }
+.archived-row .arch-btn:hover { border-color:var(--accent-teal); }
+
+/* Sort Bar */
+.sort-bar { display:flex; gap:8px; margin-bottom:12px; }
+.sort-bar button { background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); color:var(--text-muted); padding:4px 12px; border-radius:var(--radius-sm); cursor:pointer; font-family:var(--font-mono); font-size:13px; transition:all 0.2s; }
+.sort-bar button:hover, .sort-bar button.active { border-color:var(--accent-teal); color:var(--accent-teal); }
+
+/* Collapsible Panels */
+.collapse-section { margin-bottom:12px; }
+.collapse-trigger { display:flex; align-items:center; gap:8px; padding:10px 16px; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-md); cursor:pointer; font-family:var(--font-mono); font-size:14px; color:var(--text-secondary); transition:all 0.2s; }
+.collapse-trigger:hover { border-color:var(--glass-border-hover); color:var(--text-primary); }
+.collapse-trigger .arrow { transition:transform 0.2s; display:inline-block; }
+.collapse-trigger.open .arrow { transform:rotate(90deg); }
+.collapse-body { display:none; padding:16px; background:var(--glass-bg); border:1px solid var(--glass-border); border-top:none; border-radius:0 0 var(--radius-md) var(--radius-md); }
+.collapse-body.open { display:block; animation:fade-in 0.2s ease-out; }
+
+.layer-bar { display:flex; align-items:center; gap:8px; margin:6px 0; font-family:var(--font-mono); font-size:13px; }
+.layer-bar .layer-name { width:90px; color:var(--text-muted); text-transform:uppercase; font-size:12px; }
+.layer-bar .layer-track { flex:1; height:18px; background:rgba(255,255,255,0.05); border-radius:3px; overflow:hidden; display:flex; }
+.layer-bar .layer-fill { height:100%; border-radius:3px; transition:width 0.5s; }
+.layer-bar .layer-fill.p0 { background:var(--accent-red); }
+.layer-bar .layer-fill.p1 { background:var(--accent-orange); }
+.layer-bar .layer-fill.p2 { background:var(--accent-yellow); }
+.layer-bar .layer-count { width:80px; text-align:right; color:var(--text-muted); font-size:12px; }
+
+.adv-tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+.adv-tabs button { background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); color:var(--text-muted); padding:6px 14px; border-radius:var(--radius-sm); cursor:pointer; font-family:var(--font-mono); font-size:13px; transition:all 0.2s; }
+.adv-tabs button:hover, .adv-tabs button.active { border-color:var(--accent-teal); color:var(--accent-teal); }
+.adv-content { font-family:var(--font-mono); font-size:13px; color:var(--text-secondary); }
+
+.empty-state { text-align:center; padding:40px; color:var(--text-muted); }
+.empty-state .icon { font-size:48px; margin-bottom:16px; opacity:0.3; }
+
+.footprint-section { max-width:700px; margin:16px auto 0; }
+.footprint-table { width:100%; border-collapse:collapse; font-family:var(--font-mono); font-size:13px; }
+.footprint-table th { text-align:left; padding:6px 10px; border-bottom:1px solid var(--glass-border); color:var(--text-muted); font-weight:400; font-size:12px; }
+.footprint-table td { padding:6px 10px; border-bottom:1px solid rgba(255,255,255,0.04); color:var(--text-secondary); }
+.footprint-table .sys-mingjing { color:var(--accent-teal); font-weight:600; }
+.footprint-table .sys-other { color:var(--text-primary); }
+.footprint-table td.rt { text-align:right; }
+.footprint-gpu { font-family:var(--font-mono); font-size:13px; color:var(--text-muted); padding:4px 10px; border-bottom:1px solid rgba(255,255,255,0.04); display:flex; align-items:center; gap:8px; }
+.footprint-gpu .gpu-bar { flex:1; height:5px; background:rgba(255,255,255,0.05); border-radius:3px; overflow:hidden; }
+.footprint-gpu .gpu-bar-fill { height:100%; border-radius:3px; }
+.footprint-gpu .gpu-hot { color:var(--accent-orange); }
+.footprint-gpu .gpu-name { color:var(--text-secondary); }
+.footprint-gpu .gpu-idle { color:var(--text-muted); font-style:italic; }
+.footprint-gpu .gpu-bar-vram { width:60px; flex:none; }
+
+footer { text-align:center; padding:24px; color:var(--text-muted); font-size:13px; border-top:1px solid var(--glass-border); margin-top:30px; font-family:var(--font-mono); }
+
+::-webkit-scrollbar { width:6px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background:rgba(255,255,255,0.18); }
+
+@media (max-width:800px) {
+  .instance-grid { grid-template-columns:1fr; }
+  .overview-bar { font-size:12px; gap:12px; }
+  body { padding:12px; }
+  .header { flex-direction:column; gap:10px; }
+}
+</style>
+</head>
+<body>
+
+<div id="loading" style="text-align:center;padding:80px 20px;color:var(--text-muted)">
+  <div style="width:36px;height:36px;border:3px solid rgba(255,255,255,0.06);border-top-color:var(--accent-teal);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 20px"></div>
+  <p>初始化体检中心...</p>
+</div>
+
+<div id="app" style="display:none">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="brand">
+      <h1>乾坤镜 · 体检中心</h1>
+      <span style="font-family:var(--font-mono);font-size:13px;color:var(--text-muted)">v0.11.9m</span> <!-- 更新时同步修改此版本号 -->
+    </div>
+    <div class="status-bar">
+      <span class="dot online" id="archiverDot"></span>
+      <span style="font-family:var(--font-mono);font-size:14px;color:var(--text-secondary)" id="archiverText">归档器在线</span>
+      <button class="btn" onclick="QK.refresh()">刷新</button>
+      <button class="btn" onclick="QK.toggleLang()" id="langBtn">EN</button>
+    </div>
+  </div>
+
+  <!-- Alert Banner -->
+  <div class="alert-banner" id="alertBanner"></div>
+
+  <!-- Global Overview -->
+  <div class="overview-bar" id="overviewBar"></div>
+
+  <!-- Sort Bar -->
+  <div class="sort-bar" id="sortBar">
+    <button class="active" onclick="QK.sort('health')">健康度 ↓</button>
+    <button onclick="QK.sort('severity')">严重度 ↓</button>
+    <button onclick="QK.sort('name')">名称 A-Z</button>
+  </div>
+
+  <!-- Instance Card Grid -->
+  <div class="instance-grid" id="instanceGrid"></div>
+
+  <!-- Disease Distribution -->
+  <div class="collapse-section">
+    <div class="collapse-trigger" onclick="QK.toggleCollapse('diseaseDist')">
+      <span class="arrow">▶</span> 疾病分布 · Disease Distribution
+    </div>
+    <div class="collapse-body" id="diseaseDist"></div>
+  </div>
+
+  <!-- Diagnostic Coverage -->
+  <div class="collapse-section">
+    <div class="collapse-trigger" onclick="QK.toggleCollapse('dxCoverage')">
+      <span class="arrow">▶</span> 诊断能力 · Diagnostic Coverage
+    </div>
+    <div class="collapse-body" id="dxCoverage"></div>
+  </div>
+
+  <!-- Advanced Info -->
+  <div class="collapse-section">
+    <div class="collapse-trigger" onclick="QK.toggleCollapse('advInfo')">
+      <span class="arrow">▶</span> 高级信息 · Advanced Info
+    </div>
+    <div class="collapse-body" id="advInfo">
+      <div class="adv-tabs" id="advTabs"></div>
+      <div class="adv-content" id="advContent"></div>
+    </div>
+  </div>
+
+  <div class="collapse-section">
+    <div class="collapse-trigger" onclick="QK.toggleCollapse('resourceFootprint')">
+      <span class="arrow">▶</span> 資源足跡 · Resource Footprint
+    </div>
+    <div class="collapse-body" id="resourceFootprint"></div>
+  </div>
+
+  <footer>乾坤镜 · LIT 1.4 轻量折射阵列</footer>
+</div>
+
+<script>
+(function() {
+var D = null;
+var LANG = 'zh';
+var INSTANCES = [];
+var SORT = 'health';
+var ACTIVE_ADV_TAB = 'token';
+
+var I18N = {
+  zh: {
+    archiverOnline: '归档器在线', archiverOffline: '归档器离线',
+    instances: '实例', healthy: '健康', unhealthy: '不健康',
+    integrity: '完整性', coverage: '诊断覆盖', updated: '数据更新于',
+    secondsAgo: 's 前', minutesAgo: 'm 前', hoursAgo: 'h 前',
+    daysAgo: 'd 前', noDisease: '暂无疾病', systemHealthy: '系统运行正常',
+    occurrence: '发作', times: '次', firstSeen: '首次发现', duration: '持续',
+    confidence: '置信度', evidence: '诊断依据', remedy: '建议处置',
+    noRemedy: '暂无处置建议', noRemedyDetail: '该疾病的药方尚未录入',
+    ignore: '忽略', restore: '恢复', dismiss: '关闭',
+    collapse: '收起详情', expand: '展开详情',
+    total: '总计', detected: '检出', p0Urgent: 'P0 紧急',
+    healthyCount: '健康', warningCount: '警告', criticalCount: '危急',
+    healthReset: '健康复位', healthResetConfirm: '确认复位此实例健康状态？新病情出现后将自动恢复真实评估。',
+    archive: '归档', archived: '已归档', archivedDiseases: '已归档疾病',
+    apiError: '操作失败，请检查网络连接',
+    probeOnline: '探针在线', probeOffline: '探针离线', probeNever: '探针未上报', probeExcluded: '暂停观察',
+    probeGuide: '请确认对应系统已安装并启动 mingjin-probe',
+    systemLevel: '系统级',
+  },
+  en: {
+    archiverOnline: 'Archiver Online', archiverOffline: 'Archiver Offline',
+    instances: 'Instances', healthy: 'Healthy', unhealthy: 'Unhealthy',
+    integrity: 'Integrity', coverage: 'Coverage', updated: 'Updated',
+    secondsAgo: 's ago', minutesAgo: 'm ago', hoursAgo: 'h ago',
+    daysAgo: 'd ago', noDisease: 'No Disease', systemHealthy: 'System Healthy',
+    occurrence: 'Occurrence', times: 'times', firstSeen: 'First Seen', duration: 'Duration',
+    confidence: 'Confidence', evidence: 'Evidence', remedy: 'Remedy',
+    noRemedy: 'No Remedy', noRemedyDetail: 'No remedy recorded for this disease',
+    ignore: 'Dismiss', restore: 'Restore', dismiss: 'Dismiss',
+    collapse: 'Collapse', expand: 'Expand',
+    total: 'Total', detected: 'Detected', p0Urgent: 'P0 Urgent',
+    healthyCount: 'Healthy', warningCount: 'Warning', criticalCount: 'Critical',
+    healthReset: 'Reset Health', healthResetConfirm: 'Reset this instance to healthy? Will auto-revert when new diseases appear.',
+    archive: 'Archive', archived: 'Archived', archivedDiseases: 'Archived Diseases',
+    apiError: 'Operation failed, please check connection',
+    probeOnline: 'Probe Online', probeOffline: 'Probe Offline', probeNever: 'Probe Not Deployed', probeExcluded: 'Observation Paused',
+    probeGuide: 'Please install and start mingjin-probe on the target system',
+    systemLevel: 'System-Level',
+  }
+};
+
+function t(key) { return (I18N[LANG]||I18N.zh)[key]||key; }
+
+function fmtAgo(ts) {
+  if (!ts) return '--';
+  var s = Math.max(0, (Date.now()/1000) - ts);
+  if (s < 60) return Math.floor(s) + t('secondsAgo');
+  if (s < 3600) return Math.floor(s/60) + t('minutesAgo');
+  if (s < 86400) return Math.floor(s/3600) + t('hoursAgo');
+  return Math.floor(s/86400) + t('daysAgo');
+}
+
+function fmtDur(sec) {
+  if (!sec) return '--';
+  if (sec < 60) return Math.floor(sec) + 's';
+  if (sec < 3600) return Math.floor(sec/60) + 'm';
+  if (sec < 86400) return Math.floor(sec/3600) + 'h' + Math.floor((sec%3600)/60) + 'm';
+  return Math.floor(sec/86400) + 'd' + Math.floor((sec%86400)/3600) + 'h';
+}
+
+function loadDismissedAlerts() {
+  try { return new Set(JSON.parse(localStorage.getItem('qk_dismissed_alerts')||'[]')); }
+  catch(e) { return new Set(); }
+}
+
+function saveDismissedAlerts(arr) {
+  localStorage.setItem('qk_dismissed_alerts', JSON.stringify(Array.from(arr)));
+}
+
+function saveUIState() {
+  var expanded = document.querySelector('.detail-panel.open');
+  UI_STATE.expandedCard = expanded ? expanded.id.replace('detail-', '') : null;
+  UI_STATE.openSections = [];
+  document.querySelectorAll('.collapse-body.open').forEach(function(el){UI_STATE.openSections.push(el.id);});
+  document.querySelectorAll('.archived-body.open').forEach(function(el){UI_STATE.openSections.push(el.id);});
+  UI_STATE.advTab = ACTIVE_ADV_TAB;
+  UI_STATE.sort = SORT;
+}
+
+function restoreUIState() {
+  if (UI_STATE.sort) {
+    SORT = UI_STATE.sort;
+    var btns = document.querySelectorAll('#sortBar button');
+    btns.forEach(function(b){b.className='';});
+    if (SORT==='health') btns[0].className='active';
+    else if (SORT==='severity') btns[1].className='active';
+    else btns[2].className='active';
+  }
+  if (UI_STATE.expandedCard) {
+    var detail = document.getElementById('detail-' + UI_STATE.expandedCard);
+    if (detail) detail.classList.add('open');
+  }
+  UI_STATE.openSections.forEach(function(id) {
+    var body = document.getElementById(id);
+    if (body) { body.classList.add('open'); if (body.previousElementSibling) body.previousElementSibling.classList.add('open'); }
+  });
+  if (UI_STATE.advTab) { showAdvTab(UI_STATE.advTab, true); }
+}
+
+var UI_STATE = {expandedCard: null, openSections: [], advTab: '', sort: 'health'};
+
+// 各适配器诊断种类上限（非侵入式可观测上限）
+var CAP_MAP = {
+  langchain:     {zh:'100 种', en:'100 diseases'},
+  'langchain-js':{zh:'80 种',  en:'80 diseases'},
+  opencode:      {zh:'61 种',  en:'61 diseases'},
+  hermes:        {zh:'89 种',  en:'~89 diseases'},
+  lit:           {zh:'59 种',  en:'~59 diseases'},
+  tusunsun:      {zh:'75 种',  en:'~75 diseases'},
+  openclaw:      {zh:'65 种',  en:'~65 diseases'},
+  autogpt:       {zh:'14 种',  en:'~14 diseases'},
+  openhands:     {zh:'50 种',  en:'~50 diseases'},
+  crewai:        {zh:'38 种',  en:'~38 diseases'},
+  llamaindex:    {zh:'36 种',  en:'~36 diseases'},
+  vercel:        {zh:'13 种',  en:'~13 diseases'},
+};
+
+function getCap(system) {
+  var key = Object.keys(CAP_MAP).find(function(k) { return system.startsWith(k); });
+  return key ? CAP_MAP[key] : null;
+}
+
+function render() {
+  if (!D) return;
+  var gs = D.global_summary || {};
+
+  // Archiver indicator
+  var dotEl = document.getElementById('archiverDot');
+  var txtEl = document.getElementById('archiverText');
+  if (D.archiver_alive) { dotEl.className = 'dot online'; txtEl.textContent = t('archiverOnline'); }
+  else { dotEl.className = 'dot offline'; txtEl.textContent = t('archiverOffline'); }
+
+  // Alert Banner
+  var alerts = D.alerts || [];
+  var da = loadDismissedAlerts();
+  var activeAlerts = alerts.filter(function(a){ return !da.has(a.alert_key); });
+  var ab = document.getElementById('alertBanner');
+  if (activeAlerts.length) {
+    var html = '';
+    activeAlerts.forEach(function(a) {
+      html += '<span>' + a.title + ': ' + a.message + '</span>';
+      html += '<button class="alert-dismiss-btn" onclick="QK.dismissAlert(\'' + a.alert_key + '\')">' + t('dismiss') + '</button> ';
+    });
+    ab.innerHTML = html; ab.className = 'alert-banner show';
+  } else { ab.className = 'alert-banner'; }
+
+  // Global Overview
+  var ob = document.getElementById('overviewBar');
+  ob.innerHTML =
+    '<span class="val">' + gs.total_instances + '</span> ' + t('instances') +
+    ' <span class="sep">|</span> <span class="hl0">' + gs.healthy_count + '</span> ' + t('healthy') +
+    ' <span class="sep">|</span> <span class="hl2">' + gs.unhealthy_count + '</span> ' + t('unhealthy') +
+    ' <span class="sep">|</span> ' + t('integrity') + ': <span class="val">' + (gs.integrity_rate||100) + '%</span>' +
+    ' <span class="sep">|</span> ' + t('coverage') + ': <span class="val">' + gs.triage_ready + '种' + '</span>' +
+    ' <span class="sep">|</span> ' + t('updated') + ' <span class="val">' + Math.floor((gs.exported_ago_seconds||0)) + 's</span>';
+
+  // Sort & render cards
+  sortCards();
+  renderCards();
+
+  // Disease Distribution
+  renderDistribution();
+
+  // Diagnostic Coverage
+  renderCoverage();
+
+  // Advanced Info
+  renderAdvanced();
+
+  // Resource Footprint
+  renderFootprint();
+}
+
+function sortCards() {
+  var cards = D.instance_cards || [];
+  var sevOrder = {critical:0,warning:1,sub_healthy:2,healthy:3};
+  if (SORT === 'health') cards.sort(function(a,b){return sevOrder[a.health_level]-sevOrder[b.health_level]||a.display_name.localeCompare(b.display_name);});
+  else if (SORT === 'severity') cards.sort(function(a,b){return (a.p0_count===b.p0_count?(a.p1_count===b.p1_count?b.p2_count-a.p2_count:b.p1_count-a.p1_count):b.p0_count-a.p0_count)||a.display_name.localeCompare(b.display_name);});
+  else cards.sort(function(a,b){return a.display_name.localeCompare(b.display_name);});
+  INSTANCES = cards;
+}
+
+function renderCards() {
+  var grid = document.getElementById('instanceGrid');
+  if (!INSTANCES.length) { grid.innerHTML = '<div class="empty-state"><div class="icon">🔬</div><p>暂无实例数据</p></div>'; return; }
+
+  var html = '';
+  INSTANCES.forEach(function(c) {
+    var cls = 'inst-card ' + c.health_level;
+    var cap = getCap(c.system);
+    html += '<div class="' + cls + '" id="card-' + esc(c.display_name) + '">';
+    html += '<div class="inst-header"><span class="inst-name">' + esc(c.display_name) + '</span>';
+    html += '<span class="hl-badge ' + c.health_level + '">' + c.health_level_label + '</span>';
+    if (c.health_level !== 'healthy') {
+      html += '<button class="btn small reset-btn" onclick="event.stopPropagation();QK.healthReset(\'' + esc(c.display_name) + '\')">' + t('healthReset') + '</button>';
+    }
+    html += '</div>';
+    html += '<div class="inst-meta">';
+    if (c.pid < 0) {
+      html += '<span style="color:var(--accent-blue)">🔵 ' + t('systemLevel') + '</span>';
+      html += '</div>';
+    } else {
+    if (c.excluded) {
+      html += '<span style="color:var(--accent-yellow)">🟡 ' + t('probeExcluded') + '</span>';
+    } else {
+    var pt = c.probe_time || -1;
+    if (pt < 0) {
+      html += '<span style="color:var(--accent-red)">🔴 ' + t('probeNever') + '</span>';
+      html += '<span style="color:var(--text-muted);font-size:11px">' + t('probeGuide') + '</span>';
+    } else if (pt <= 300) {
+      html += '<span style="color:var(--accent-green)">🟢 ' + t('probeOnline') + ' · 心跳 ' + fmtAgo(c.last_heartbeat) + '</span>';
+    } else {
+      html += '<span style="color:var(--accent-orange)">🟠 ' + t('probeOffline') + ' · 最后心跳 ' + fmtAgo(c.last_heartbeat) + '</span>';
+      html += '<span style="color:var(--text-muted);font-size:11px">💡 ' + t('probeGuide') + '</span>';
+    }
+    }
+    html += '<span>PID ' + (c.pid||'?') + '</span>';
+    html += ' <button class="btn small" onclick="event.stopPropagation();QK.toggleExclude(\'' + c.system + '\', ' + c.excluded + ')\">' + (c.excluded ? '恢复观察' : '暂停观察') + '</button></div>';
+    }
+    html += '<hr class="inst-divider">';
+
+    var dxs = c.diagnoses || [];
+    if (!dxs.length) {
+      html += '<div class="inst-healthy"><span class="ok">✅</span> ' + t('systemHealthy') + '</div>';
+      html += '<div class="inst-meta">' + (c.triage_ready < 0 ? t('systemLevel') : t('coverage') + ': ' + c.triage_ready + '种') + (cap ? ' · 诊断上限: ' + cap[LANG] : '') + '</div>';
+      html += '<div class="expand-btn" onclick="QK.toggleCard(\'' + esc(c.display_name) + '\')">' + t('expand') + ' →</div>';
+    } else {
+      dxs.forEach(function(dx) {
+        html += '<div class="disease-row">';
+        html += '<div class="sev-bar ' + dx.severity + '"></div>';
+        html += '<span class="dx-name">' + dx.severity + ' ' + esc(dx.diagnosis_name) + '</span>';
+        html += '<span class="dx-conf">' + Math.round(dx.confidence*100) + '%</span>';
+        html += '<span class="dx-time">' + fmtAgo(dx.first_seen) + '</span>';
+        html += '<span class="dx-count">' + t('occurrence') + (dx.occurrence_count||1) + t('times') + '</span>';
+        html += '</div>';
+      });
+      html += '<div class="inst-meta" style="margin-top:4px">' + (c.triage_ready < 0 ? t('systemLevel') : t('coverage') + ': ' + c.triage_ready + '种') + (cap ? ' · 诊断上限: ' + cap[LANG] : '') + '</div>';
+      html += '<div class="expand-btn" onclick="QK.toggleCard(\'' + esc(c.display_name) + '\')">' + t('expand') + ' →</div>';
+    }
+
+    // Detail panel
+    html += '<div class="detail-panel" id="detail-' + esc(c.display_name) + '">';
+    if (!dxs.length) {
+      html += '<div class="inst-healthy"><span class="ok">✅</span> ' + t('systemHealthy') + '</div>';
+      html += '<div style="font-family:var(--font-mono);font-size:13px;color:var(--text-muted);margin-top:8px">' + (c.triage_ready < 0 ? t('systemLevel') : t('coverage') + ': ' + c.triage_ready + '种') + (cap ? ' · 诊断上限: ' + cap[LANG] : '') + '</div>';
+    } else {
+      html += '<div class="detail-header">' + t('total') + ' ' + dxs.length + ' (' + t('criticalCount') + ': ' + c.p0_count + ', ' + t('warningCount') + ': ' + c.p1_count + ', ' + t('healthyCount') + ': ' + c.p2_count + ')</div>';
+      dxs.forEach(function(dx) { html += renderDxDetail(dx, c.display_name); });
+    }
+    // Archived diseases section
+    var archived = c.archived_diagnoses || [];
+    if (archived.length) {
+      html += '<div class="archived-section">';
+      html += '<div class="arch-trigger" onclick="QK.toggleArchived(\'' + esc(c.display_name) + '\')"><span class="arrow">▶</span> ' + t('archivedDiseases') + ' (' + archived.length + ')</div>';
+      html += '<div class="archived-body" id="archived-' + esc(c.display_name) + '">';
+      archived.forEach(function(dx) {
+        html += '<div class="archived-row">';
+        html += '<span class="arch-label">' + t('archived') + '</span>';
+        html += '<span class="arch-name">' + (dx.severity||'P2') + ' ' + esc(dx.diagnosis_name||dx.fault_id) + '</span>';
+        html += '<span>' + fmtAgo(dx.first_seen) + '</span>';
+        html += '<span>×' + (dx.occurrence_count||1) + '</span>';
+        html += '<button class="arch-btn" onclick="event.stopPropagation();QK.restoreDisease(\'' + dx.fault_id + '\',\'' + c.display_name + '\')">' + t('restore') + '</button>';
+        html += '</div>';
+      });
+      html += '</div></div>';
+    }
+    html += '<div class="expand-btn" onclick="QK.toggleCard(\'' + esc(c.display_name) + '\')">← ' + t('collapse') + '</div>';
+    html += '</div>';
+    html += '</div>';
+  });
+  grid.innerHTML = html;
+}
+
+function renderDxDetail(dx, displayName) {
+  var sev = dx.severity || 'P2';
+  var conf = Math.round((dx.confidence||0)*100);
+
+  var h = '<div class="dx-detail ' + sev.toLowerCase() + '">';
+  h += '<div class="dx-title">' + esc(dx.diagnosis_name||dx.fault_id) + '<span class="dx-sev ' + sev + '">' + sev + '</span></div>';
+  h += '<div class="conf-bar-wrap"><div class="conf-bar"><div class="conf-fill ' + sev + '" style="width:' + conf + '%"></div></div><span class="conf-pct">' + conf + '%</span></div>';
+
+  h += '<div class="dx-meta-row">';
+  h += '<span><span class="lbl">' + t('firstSeen') + ':</span> <span class="val">' + fmtAgo(dx.first_seen) + '</span></span>';
+  h += '<span><span class="lbl">' + t('duration') + ':</span> <span class="val">' + fmtDur(dx.duration_seconds) + '</span></span>';
+  h += '<span><span class="lbl">' + t('occurrence') + ':</span> <span class="val">' + (dx.occurrence_count||1) + ' ' + t('times') + '</span></span>';
+  h += '</div>';
+
+  // Evidence
+  var evidence = dx.detail ? (dx.detail.evidence||[]) : (dx.evidence||[]);
+  if (Array.isArray(evidence) && evidence.length) {
+    h += '<div class="dx-section"><div class="dx-section-title">' + t('evidence') + '</div>';
+    evidence.forEach(function(ev,i) {
+      var summary = ev.summary || (typeof ev === 'string' ? ev : JSON.stringify(ev).slice(0,200));
+      h += '<div class="dx-evidence-item">' + (i+1) + '. ' + esc(String(summary).slice(0,300)) + '</div>';
+    });
+    h += '</div>';
+  }
+
+  // Remedy
+  var remedy = dx.remedy;
+  if (remedy && (remedy.emergency || remedy.immediate || remedy.short_term || remedy.long_term)) {
+    h += '<div class="dx-section"><div class="dx-section-title">' + t('remedy') + '</div><div class="dx-remedy-tiers">';
+    ['emergency','immediate','short_term','long_term'].forEach(function(tier) {
+      var r = remedy[tier];
+      if (r && r.summary) {
+        h += '<div class="dx-remedy-tier"><span class="tier-label ' + tier + '">' + (tier==='emergency'?'🚨':tier==='immediate'?'⚡':tier==='short_term'?'📋':'🔧') + ' ' + tier + ':</span><span class="tier-summary">' + esc(r.summary) + '</span></div>';
+      }
+    });
+    h += '</div></div>';
+  } else {
+    h += '<div class="dx-section"><div class="dx-section-title">' + t('remedy') + '</div><div class="dx-no-remedy">⚪ ' + t('noRemedy') + ' — ' + t('noRemedyDetail') + '</div></div>';
+  }
+
+  // Actions
+  h += '<div class="dx-actions">';
+  h += '<button class="danger" onclick="QK.dismissDisease(\'' + dx.fault_id + '\',\'' + displayName + '\')">' + t('ignore') + '</button>';
+  h += '<button onclick="QK.archiveDisease(\'' + dx.fault_id + '\',\'' + displayName + '\')">' + t('archive') + '</button>';
+  h += '</div>';
+  h += '</div>';
+  return h;
+}
+
+function renderDistribution() {
+  var dist = D.disease_distribution || {};
+  var layers = dist.by_layer || {};
+  var html = '';
+  var layerOrder = ['system','network','model','tool','agent','memory','probe','data_quality','business'];
+  layerOrder.forEach(function(name) {
+    var l = layers[name] || {total:0,detected:0};
+    var total = l.total || 0;
+    var detected = l.detected || 0;
+    var pct = total > 0 ? Math.round(detected/Math.max(total,1)*100) : 0;
+    html += '<div class="layer-bar">';
+    html += '<span class="layer-name">' + name + '</span>';
+    html += '<div class="layer-track"><div class="layer-fill p0" style="width:' + pct + '%"></div></div>';
+    html += '<span class="layer-count">' + t('detected') + ' ' + detected + '/' + total + '</span>';
+    html += '</div>';
+  });
+  document.getElementById('diseaseDist').innerHTML = html || '<div class="empty-state">暂无分布数据</div>';
+}
+
+function renderCoverage() {
+  var triage = D.triage || {};
+  var coverage = D.global_summary || {};
+  var html = '<div style="font-family:var(--font-mono);font-size:14px;color:var(--text-secondary)">';
+  html += t('coverage') + ': <strong>' + coverage.triage_ready + '种</strong>';
+  var tiers = triage.tiers || {};
+  html += ' | P0: ' + (tiers.P0?tiers.P0.covered+'/'+tiers.P0.total:'--');
+  html += ' | P1: ' + (tiers.P1?tiers.P1.covered+'/'+tiers.P1.total:'--');
+  html += ' | P2: ' + (tiers.P2?tiers.P2.covered+'/'+tiers.P2.total:'--');
+  html += '<div style="margin-top:8px;font-size:12px;color:var(--text-muted)">';
+  html += 'ℹ️ 每种适配器触发的事件类型不同，实际可查疾病上限各不一致，详见各实例卡片底部';
+  if (triage.missing_fields && triage.missing_fields.length) {
+    html += '<br>缺少字段: ' + triage.missing_fields.join(', ');
+  }
+  html += '</div>';
+  html += '</div>';
+  document.getElementById('dxCoverage').innerHTML = html;
+}
+
+function renderAdvanced() {
+  var html = '';
+  var tabs = [
+    {id:'token',label:'Token 消耗'},
+    {id:'model',label:'模型分布'},
+    {id:'latency',label:'延迟分布'},
+    {id:'freq',label:'API 频率'},
+    {id:'integ',label:'完整性'},
+    {id:'cap',label:'容量'},
+    {id:'hot',label:'热轨'},
+    {id:'otel',label:'OTEL'},
+    {id:'selfh',label:'自检'},
+  ];
+  html += tabs.map(function(t){return '<button onclick="QK.showAdvTab(\''+t.id+'\')" id="advt-'+t.id+'">'+t.label+'</button>';}).join('');
+  document.getElementById('advTabs').innerHTML = html;
+  showAdvTab('token', true);
+}
+
+function showAdvTab(id, init) {
+  ACTIVE_ADV_TAB = id;
+  var btns = document.querySelectorAll('#advTabs button');
+  btns.forEach(function(b){b.className='';});
+  var target = document.getElementById('advt-'+id);
+  if (target) target.className = 'active';
+  if (init && ['token','model','latency','freq','integ','cap','hot','otel','selfh'].indexOf(id)===-1) return;
+
+  var c = document.getElementById('advContent');
+  if (id === 'token') { c.innerHTML = renderTokenTable(); }
+  else if (id === 'model') { c.innerHTML = renderModelList(); }
+  else if (id === 'latency') { c.innerHTML = renderLatency(); }
+  else if (id === 'freq') { c.innerHTML = renderFreq(); }
+  else if (id === 'integ') { c.innerHTML = renderIntegrity(); }
+  else if (id === 'cap') { c.innerHTML = renderCapacity(); }
+  else if (id === 'hot') { c.innerHTML = renderHot(); }
+  else if (id === 'otel') { c.innerHTML = renderOTEL(); }
+  else if (id === 'selfh') { c.innerHTML = renderSelfHealth(); }
+}
+
+function fmtM(n) { return n >= 1000000 ? (n/1000000).toFixed(1)+'M' : n >= 1000 ? (n/1000).toFixed(1)+'K' : n; }
+
+function renderTokenTable() {
+  var rows = D.token_by_system || [];
+  var maxT = 1;
+  rows.forEach(function(r){ var t = (r.total_tokens||0); if (t>maxT) maxT = t; });
+  var h = '<table style="width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:14px">';
+  h += '<tr><th style="text-align:left;padding:6px;border-bottom:1px solid var(--glass-border);color:var(--text-muted)">系统</th><th>输入</th><th>输出</th><th>总计</th><th>调用</th><th>占比</th></tr>';
+  rows.forEach(function(r){
+    h += '<tr><td style="padding:6px;border-bottom:1px solid rgba(255,255,255,0.04)">'+esc(r.system)+'</td>';
+    h += '<td style="text-align:right;padding:6px">'+fmtM(r.input_tokens||0)+'</td><td style="text-align:right;padding:6px">'+fmtM(r.output_tokens||0)+'</td>';
+    h += '<td style="text-align:right;padding:6px">'+fmtM(r.total_tokens||0)+'</td><td style="text-align:right;padding:6px">'+(r.call_count||0)+'</td>';
+    h += '<td style="padding:6px"><div style="height:5px;background:rgba(255,255,255,0.05);border-radius:3px;overflow:hidden"><div style="height:100%;background:var(--accent-teal);border-radius:3px;width:'+Math.round(r.total_tokens/maxT*100)+'%"></div></div></td></tr>';
+  });
+  h += '</table>';
+  if (!rows.length) h = '<div class="empty-state">暂无 Token 数据</div>';
+  return h;
+}
+
+function renderModelList() {
+  var models = D.token_by_model || [];
+  var h = '';
+  models.forEach(function(m){ h += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono)"><span style="color:var(--accent-teal)">'+esc(m.model)+'</span><span style="color:var(--text-muted)">'+(m.call_count||0)+' 次</span></div>'; });
+  return h || '<div class="empty-state">暂无模型数据</div>';
+}
+
+function renderLatency() {
+  var ls = D.latency_stats || {};
+  if (!ls.count) return '<div class="empty-state">暂无延迟数据</div>';
+  var h = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-family:var(--font-mono)">';
+  ['min','avg','max','p50','p95','p99'].forEach(function(k){
+    h += '<div style="text-align:center;padding:10px;background:rgba(0,0,0,0.15);border-radius:6px;border:1px solid rgba(255,255,255,0.04)"><div style="font-size:12px;color:var(--text-muted)">'+k.toUpperCase()+'</div><div style="font-size:18px;font-weight:600;margin-top:4px">'+Math.round(ls[k])+'ms</div></div>';
+  });
+  h += '</div>';
+  return h;
+}
+
+function renderFreq() {
+  var freq = D.call_freq || [];
+  var h = '';
+  freq.forEach(function(f){ h += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono)"><span>'+esc(f.system)+'</span><span>'+f.calls_5min+' /5min</span></div>'; });
+  return h || '<div class="empty-state">暂无调用数据</div>';
+}
+
+function renderIntegrity() {
+  var ist = D.integrity_stats || {};
+  var h = '<div style="font-family:var(--font-mono);font-size:14px">';
+  h += '验证: <span style="color:var(--accent-green)">'+(ist.verified||0)+'</span> | ';
+  h += '损坏: <span style="color:var(--accent-red)">'+(ist.corrupted||0)+'</span> | ';
+  h += '重启: <span style="color:var(--accent-amber)">'+(ist.rebooted||0)+'</span> | ';
+  h += '总计: '+(ist.total||0)+' | 比率: '+(ist.rate||100)+'%';
+  if (ist.pending) h += ' | 待验证: ' + ist.pending;
+  h += '</div>';
+  return h;
+}
+
+function renderCapacity() {
+  var cap = D.capacity || {};
+  var h = '<div style="font-family:var(--font-mono);font-size:14px">';
+  h += 'DB: ' + cap.db_size_mb + 'MB/' + cap.db_size_limit_mb + 'MB | ';
+  h += '事件: ' + cap.event_count + '/' + cap.event_count_limit + ' | ';
+  h += '磁盘: ' + cap.disk_free_mb + 'MB 剩余 | ';
+  h += '热轨: ' + cap.hot_files + ' 文件/' + cap.hot_size_mb + 'MB';
+  h += '</div>';
+  return h;
+}
+
+function renderHot() {
+  var h = '<div style="font-family:var(--font-mono);font-size:14px">';
+  h += '未归档文件: ' + (D.hot_unarchived_files||0) + ' | ';
+  h += '总量: ' + (D.hot_size_mb||0) + 'MB | ';
+  h += '归档器延迟: ' + Math.round(D.archiver_age_seconds||0) + 's';
+  h += '</div>';
+  return h;
+}
+
+function renderOTEL() {
+  var otel = D.otel_status || {};
+  var h = '<div style="font-family:var(--font-mono);font-size:14px">';
+  h += 'Receiver: ' + (otel.receiver?.online?'在线':'离线') + ' (端口:'+(otel.receiver?.port||'?')+', 收到:'+(otel.receiver?.received_count||0)+', 丢弃:'+(otel.receiver?.dropped_count||0)+') | ';
+  h += 'Exporter: 推送:'+(otel.exporter?.pushed_count||0)+', 死信:'+(otel.exporter?.dead_letter_count||0);
+  h += '</div>';
+  return h;
+}
+
+function renderSelfHealth() {
+  var sh = D.self_health || {};
+  var h = '<div style="font-family:var(--font-mono);font-size:14px">';
+  h += '归档器延迟: ' + sh.archiver_lag_sec + 's | ';
+  h += '丢包率: ' + (sh.probe_loss_rate||0) + ' | ';
+  h += 'WAL: ' + sh.wal_count + ' | ';
+  h += '内存: ' + sh.memory_rss_mb + 'MB';
+  h += '</div>';
+  return h;
+}
+
+function renderFootprint() {
+  var fp = D.resource_footprint || {};
+  var systems = fp.systems || [];
+  var gpus = fp.gpu || [];
+  if (!systems.length) return;
+  var h = '<div class="footprint-section">';
+  h += '<table class="footprint-table"><thead><tr>';
+  h += '<th>系统</th><th class="rt">RSS</th><th class="rt">VSZ</th><th class="rt">CPU</th><th class="rt">FD</th><th class="rt">运行</th>';
+  h += '</tr></thead><tbody>';
+  for (var i = 0; i < systems.length; i++) {
+    var s = systems[i];
+    var cls = s.system === 'mingjing' ? 'sys-mingjing' : 'sys-other';
+    var uptime = s.uptime_min ? (s.uptime_min >= 60 ? (s.uptime_min/60).toFixed(1) + 'h' : s.uptime_min + 'm') : '--';
+    h += '<tr><td class="' + cls + '">' + esc(s.system) + '</td>';
+    h += '<td class="rt">' + (s.rss_mb || 0) + ' MB</td>';
+    h += '<td class="rt">' + (s.vsz_mb || 0) + ' MB</td>';
+    h += '<td class="rt">' + (s.cpu_pct || 0).toFixed(1) + '%</td>';
+    h += '<td class="rt">' + (s.fd_count || 0) + '</td>';
+    h += '<td class="rt">' + uptime + '</td></tr>';
+  }
+  for (var j = 0; j < gpus.length; j++) {
+    var g = gpus[j];
+    var utilPct = g.util_pct || 0;
+    var memPct = g.mem_total_mb > 0 ? (g.mem_used_mb / g.mem_total_mb * 100) : 0;
+    var hot = utilPct > 80 ? ' gpu-hot' : '';
+    var utilLabel = (utilPct < 0.1 && (g.mem_used_mb || 0) < 100) ? '<span class="gpu-idle">空闲</span>' : utilPct.toFixed(0) + '%';
+    h += '<tr><td colspan="6"><div class="footprint-gpu">';
+    h += 'GPU#' + g.index + ' <span class="gpu-name">' + esc(g.name || '') + '</span> ' + utilLabel;
+    h += '<div class="gpu-bar"><div class="gpu-bar-fill' + hot + '" style="width:' + utilPct + '%;background:var(--accent-teal)"></div></div>';
+    h += '<div class="gpu-bar"><div class="gpu-bar-fill' + hot + '" style="width:' + utilPct + '%;background:var(--accent-teal)"></div></div>';
+    h += '<span>VRAM ' + (g.mem_used_mb/1024).toFixed(1) + '/' + (g.mem_total_mb/1024).toFixed(1) + ' GB</span>';
+    h += '<div class="gpu-bar"><div class="gpu-bar-fill" style="width:' + memPct + '%;background:var(--accent-purple)"></div></div>';
+    h += '<span class="' + (g.temp_c > 80 ? 'gpu-hot' : '') + '">' + g.temp_c + '°C</span>';
+    h += '</div></td></tr>';
+  }
+  h += '</tbody></table></div>';
+  document.getElementById('resourceFootprint').innerHTML = h;
+}
+
+function esc(str) { return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+// Public API
+window.QK = {
+  refresh: function() { fetchData(); },
+  toggleLang: function() { LANG = LANG==='zh'?'en':'zh'; document.getElementById('langBtn').textContent = LANG==='zh'?'EN':'中文'; render(); },
+  sort: function(mode) {
+    SORT = mode;
+    var btns = document.querySelectorAll('#sortBar button');
+    btns.forEach(function(b){ b.className = ''; });
+    if (mode==='health') btns[0].className = 'active';
+    else if (mode==='severity') btns[1].className = 'active';
+    else btns[2].className = 'active';
+    render();
+  },
+  toggleCard: function(name) {
+    var el = document.getElementById('detail-' + name);
+    if (el) { el.classList.toggle('open'); }
+  },
+  toggleCollapse: function(id) {
+    var body = document.getElementById(id);
+    var trigger = body.previousElementSibling;
+    body.classList.toggle('open');
+    trigger.classList.toggle('open');
+  },
+  dismissAlert: function(key) {
+    var da = loadDismissedAlerts();
+    da.add(key);
+    saveDismissedAlerts(da);
+    render();
+  },
+  dismissDisease: function(faultId, displayName) {
+    fetch('/api/dismiss-disease', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({fault_id: faultId, display_name: displayName, expires_hours: 24})
+    }).then(function(r){ return r.json(); }).then(function() { fetchData(); })
+      .catch(function(){ alert(t('apiError')); });
+  },
+  restoreDisease: function(faultId, displayName) {
+    fetch('/api/restore-disease', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({fault_id: faultId, display_name: displayName})
+    }).then(function(r){ return r.json(); }).then(function() { fetchData(); })
+      .catch(function(){ alert(t('apiError')); });
+  },
+  archiveDisease: function(faultId, displayName) {
+    fetch('/api/archive-disease', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({fault_id: faultId, display_name: displayName})
+    }).then(function(r){ return r.json(); }).then(function() { fetchData(); })
+      .catch(function(){ alert(t('apiError')); });
+  },
+  healthReset: function(displayName) {
+    if (!confirm(t('healthResetConfirm'))) return;
+    fetch('/api/health-reset', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({display_name: displayName})
+    }).then(function(r){ return r.json(); }).then(function() { fetchData(); })
+      .catch(function(){ alert(t('apiError')); });
+  },
+  toggleExclude: function(system, currentlyExcluded) {
+    var action = currentlyExcluded ? 'remove' : 'add';
+    fetch('/api/exclude', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({action: action, system: system})
+    }).then(function(r){ return r.json(); }).then(function() { fetchData(); })
+      .catch(function(){ alert(t('apiError')); });
+  },
+  toggleArchived: function(name) {
+    var el = document.getElementById('archived-' + name);
+    var tr = el.previousElementSibling;
+    el.classList.toggle('open');
+    tr.classList.toggle('open');
+  },
+  showAdvTab: function(id) { showAdvTab(id); },
+};
+
+function fetchData() {
+  saveUIState();
+  fetch('/api/data.json').then(function(r){ return r.json(); }).then(function(data) {
+    D = data;
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    render();
+    restoreUIState();
+  }).catch(function() {
+    document.getElementById('loadingText').textContent = '无法连接数据服务，请确认 web server 已启动';
+  });
+}
+
+// Poll every 30s
+fetchData();
+setInterval(fetchData, 30000);
+})();
+</script>
+</body>
+</html>

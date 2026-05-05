@@ -1,0 +1,26 @@
+name: web_dashboard
+version: "0.2.0"
+type: frontend
+default: true
+description: "零依赖只读目镜，server.py 内置定时导出（30s），前端自动刷新（30s）+ 事件流轮询（10s）"
+
+install:
+  entrypoint: "python3 src/plugins/web_dashboard/server.py --daemon --port 18088"
+  uninstall: "python3 src/plugins/web_dashboard/server.py --stop"
+
+output:
+  format: json
+  path: ~/.ming/web/data.json
+  generated_by: server.py (built-in cron thread, 30s interval)
+
+features:
+  - static_html: index.html (2700+ lines, zero dependencies)
+  - http_server: Python standard library only
+  - auto_export: server.py 启动即跑，首次立即执行，后续每 30 秒
+  - auto_refresh: 前端每 30 秒 fetch data.json，每 10 秒轮询事件流
+  - lan_access: --host 0.0.0.0 开放局域网访问
+  - auth: --token 可选 Bearer 认证
+
+limits:
+  max_memory_mb: 64
+  network: false

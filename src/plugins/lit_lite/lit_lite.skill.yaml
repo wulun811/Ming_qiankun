@@ -1,0 +1,38 @@
+name: lit_lite
+version: 0.2.2
+type: diagnostic
+default: true
+description: "开源简化诊断器。纯SQL规则，覆盖核心坑点，零LLM成本。"
+
+trigger:
+  type: cron
+  cron: "*/5 * * * *"
+
+input:
+  source: sqlite_readonly
+  query: |
+    SELECT * FROM events
+    WHERE timestamp > datetime('now', '-5 minutes')
+    AND integrity_score > 0.6
+
+install:
+  entrypoint: "python src/lit_lite.py"
+
+output:
+  format: jsonl
+  path: ~/.ming/plugins/lit_lite/out/
+  schema:
+    - diagnosis_id
+    - system
+    - fault_id
+    - diagnosis_name
+    - confidence
+    - severity
+    - evidence
+    - inference_chain
+    - status
+
+limits:
+  max_memory_mb: 256
+  max_cpu_percent: 10
+  network: false
