@@ -12,7 +12,9 @@
 [![License](https://img.shields.io/badge/license-BUSL--1.1-green.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.11.9m-green.svg)](https://github.com/wulun811/Ming_qiankun/releases)
 
-**乾坤镜是 LIT 1.4 的轻量折射阵列，不是独立诊断中台。** 它通过热轨 JSONL 文件 + SQLite/MySQL 持久层，为 LangChain、LlamaIndex、CrewAI、OpenHands、AutoGPT 等 Agent 框架提供无侵入的可观测性（部分适配器尚在适配中）。
+> **许可声明**：乾坤镜采用 **Business Source License 1.1**。年收入 <$100K 的公司和个人免费商用，非商用无限制。**2030-12-31 自动转换为 Apache 2.0**。
+
+**乾坤镜是 LIT 1.4 的轻量折射阵列，不是独立诊断中台。** 它通过热轨 JSONL 文件 + SQLite/MySQL 持久层，为 OpenClaw、Hermes、LangChain 等 Agent 框架提供无侵入的可观测性（LlamaIndex、CrewAI、OpenHands、AutoGPT 适配器尚在社区适配中）。
 
 ---
 
@@ -108,16 +110,15 @@ docker run -d --name ming -p 18088:18088 ming
 │  (无状态)    │                          │  (唯一写入者) │
 └─────────────┘                          └──────┬───────┘
        │                                        │
-       │  LangChain / LlamaIndex                │ SQLite / MySQL
-       │  CrewAI / OpenHands                    ▼
-       │  AutoGPT / Hermes / MCP         ┌──────────────┐
+       │  OpenClaw / Hermes                     │ SQLite / MySQL
+       │  LangChain / LlamaIndex                ▼
+       │  CrewAI / OpenHands / AutoGPT   ┌──────────────┐
        │                                 │  Query       │
        └────────────────────────────────►│  Bridge      │
                                          └──────┬───────┘
                                                 │
                                           ┌─────▼─────┐
                                           │  Web UI   │
-                                          │  / MCP    │
                                           └───────────┘
 ```
 
@@ -135,15 +136,117 @@ docker run -d --name ming -p 18088:18088 ming
 
 | 适配器 | 语言 | 事件类型 |
 |--------|------|----------|
-| LangChain | Python | llm_invoke, tool_call, memory_retrieve (待适配) |
+| **OpenClaw** | Node.js | llm_invoke, tool_call, error |
+| **Hermes** | Python | llm_invoke, tool_call, memory_retrieve |
+| **LangChain** | Python | llm_invoke, tool_call, memory_retrieve |
 | LlamaIndex | Python | llm_invoke, memory_retrieve, agent_step (待适配) |
 | CrewAI | Python | agent_step, llm_invoke (待适配) |
 | OpenHands | Python | agent_step, llm_invoke, tool_call (待适配) |
 | AutoGPT | Python | agent_step, llm_invoke (待适配) |
-| Hermes | Python | llm_invoke, tool_call, memory_retrieve |
-| MCP | Python | tool_call, memory_retrieve, llm_invoke |
 
-> 所有适配器采用 **monkey-patch + 零第三方依赖** 设计。未安装目标框架时静默降级，不影响主流程。使用第三方框架的适配器需额外安装对应框架。（标记"待适配"的为社区贡献方向，欢迎 PR。）
+> 所有适配器采用 **monkey-patch + 零第三方依赖** 设计。未安装目标框架时静默降级，不影响主流程。标记"待适配"的为社区贡献方向，欢迎 PR。
+
+![OpenClaw 对话截图 — 随时询问近期健康状况](updocs/image/openclawyanshi.png)
+
+---
+
+## 诊断能力（50 种典型病症示例）
+
+乾坤镜内置 **157 种病症检测规则**，以下是 OpenClaw 运行时可自动诊断的 50 个典型示例：
+
+### 系统层
+
+| ID | 病症 | 级别 | 描述 |
+|----|------|------|------|
+| SYS-002 | 内存溢出（OOM） | P0 | 进程内存溢出，通常是内存不足或内存泄漏导致 |
+| SYS-003 | 内存持续增长（泄漏） | P1 | RSS 近期均值显著高于早期均值（≥1.8x），疑似内存持续泄漏 |
+| SYS-004 | 虚拟内存异常膨胀 | P2 | 虚拟内存远超物理内存（Node.js 阈值 30GB） |
+| SYS-005 | 文件描述符泄漏 | P1 | 文件描述符数量持续增长，可能未正确关闭文件/连接 |
+| SYS-006 | 线程爆炸 | P1 | 线程数异常增长，可能导致上下文切换开销暴增 |
+| SYS-007 | 磁盘空间不足 | P1 | 磁盘剩余空间低于 500MB，可能导致日志写入失败 |
+| SYS-008 | 静默异常（僵尸进程） | P1 | PID 存活但 10 分钟内无事件发出，可能已僵死 |
+| SYS-013 | 归档器死亡 | P0 | 归档器心跳停止，事件无法持久化 |
+| SYS-017 | CPU 负荷高 | P1 | 1 分钟负载超过 CPU 核心数的 80% |
+| SYS-019 | CPU Load 异常飙升 | P1 | CPU 1 分钟 load 短时间暴增 3 倍以上，可能 CPU 风暴 |
+| SYS-032 | Token 消耗突增 | P1 | 近 5 分钟 Token 消耗超过基准的 3 倍 |
+
+### 网络层
+
+| ID | 病症 | 级别 | 描述 |
+|----|------|------|------|
+| NET-017 | TCP 连接失败 | P0 | 网络不通或目标主机不可达 |
+| NET-018 | DNS 解析失败 | P0 | 域名无法解析，可能是 DNS 服务器故障 |
+| NET-020 | HTTP 5xx 服务端错误 | P1 | 目标服务频繁返回 5xx，服务可能不稳定 |
+| NET-021 | 特定 Host 频繁失败 | P1 | 特定目标主机错误率超过 30% |
+| NET-024 | 网络分区（非 LLM 延迟） | P1 | 网络层连接失败导致 LLM 无响应，非模型延迟 |
+| NET-027 | 连接池耗尽 | P1 | 同一目标主机并发连接数过高，可能连接池耗尽 |
+| NET-029 | LLM Rate Limit（限流） | P1 | LLM API 返回 429，触发速率限制 |
+| NET-030 | LLM 认证失败 | P0 | API Key 过期或无权限，业务立即中断 |
+| NET-031 | LLM 服务过载 | P1 | LLM API 返回 503，服务端过载/维护 |
+| NET-032 | LLM 服务端内部错误 | P1 | LLM API 返回 500，模型推理异常或后端崩溃 |
+
+### 模型层
+
+| ID | 病症 | 级别 | 描述 |
+|----|------|------|------|
+| MDL-029 | LLM 输出被截断 | P2 | 输出因 token 限制被截断，可能需要增大 max_tokens |
+| MDL-030 | LLM 内容被过滤 | P1 | 输出被内容过滤器拦截，可能触发安全策略 |
+| MDL-031 | LLM 空返回 | P2 | 返回 200 但无输出内容，可能是提示词问题 |
+| MDL-032 | 提示词臃肿 | P2 | 输入 token 远超输出，提示词可能过于冗长 |
+| MDL-033 | 特定模型高延迟 | P1 | 特定模型响应延迟超过 5 秒 |
+| MDL-036 | 推理成本失控 | P1 | Token 消耗超过阈值，检查循环调用或模型降级 |
+| MDL-039 | LLM 空转（无工具调用） | P1 | LLM 多次调用但无工具调用跟进，可能存在推理循环 |
+| MDL-040 | 模型 API 密钥未配置 | P0 | API 密钥未配置或已失效，LLM 调用将全部失败 |
+| MDL-041 | 模型缓存命中率低 | P2 | 超过 90% 的 LLM 调用未命中缓存 |
+
+### 工具层
+
+| ID | 病症 | 级别 | 描述 |
+|----|------|------|------|
+| TLT-039 | 工具调用超时 | P1 | 工具调用超时，依赖服务可能不可用 |
+| TLT-043 | 工具成功但下游失败 | P1 | 工具调用成功但后续发生错误，下游依赖问题 |
+| TLT-044 | 工具权限不足 | P1 | 工具调用因权限不足失败 |
+| TLT-046 | 工具选择不当 | P2 | 工具频繁失败（3次以上），可能选错工具或参数不当 |
+| TLT-047 | 工具连续失败 | P1 | 同一工具 5 分钟内连续失败超过 3 次 |
+| TLT-048 | 工具权限失控 | P0 | Agent 调用高危工具，需立即检查权限配置 |
+| TLT-052 | 长时间无响应（思考停滞） | P1 | Agent 步骤开始后超过 2 分钟未完成 |
+| TLT-058 | 危险工具调用 | P0 | Agent 调用高风险系统命令，可能造成不可逆影响 |
+| TLT-060 | 工具输入循环重复 | P1 | 同 session 内相同参数出现 ≥ 5 次，存在调用循环 |
+
+### Agent 层
+
+| ID | 病症 | 级别 | 描述 |
+|----|------|------|------|
+| AGT-058 | 多 Agent 通信开销爆炸 | P1 | LLM 调用频次和 Token 消耗呈 O(N²) 增长 |
+| AGT-062 | 错误传播与级联崩盘 | P0 | 同一错误类型频繁出现，可能引发级联崩盘 |
+| AGT-063 | 开发失败恢复能力弱 | P0 | 同一错误类型重复出现且无修复事件 |
+| AGT-067 | Agent 达到最大轮次 | P2 | Agent 达到最大推理轮次限制，任务被迫中止 |
+| AGT-071 | Agent 组件错误高频 | P2 | 推理模块组件错误高频 ≥ 5 次，可能存在系统性问题 |
+
+### 探针底座 & 数据质量
+
+| ID | 病症 | 级别 | 描述 |
+|----|------|------|------|
+| PRB-078 | 探针持续丢包 | P1 | 探针持续丢包，可能缓冲区满或磁盘慢 |
+| PRB-079 | 哈希链损坏 | P0 | 哈希链完整性校验失败，数据可能被篡改 |
+| PRB-081 | 探针缓冲区积压 | P1 | 探针缓冲区持续增长，归档器可能消费慢 |
+| PRB-082 | 探针自错误累积 | P2 | 探针自身错误频繁，可能影响数据质量 |
+| DQT-086 | 异常类型频率暴增 | P1 | 同一错误类型 5 分钟内出现超过 10 次 |
+| DQT-087 | 堆栈模式重复 | P2 | 相同堆栈跟踪频繁出现，可能是同一根因 |
+
+> **完整 157 种病症定义** 见 [`config/diseases.yaml`](config/diseases.yaml)。通过 `python src/cli.py dx list` 查看当前系统诊断结果。
+
+---
+
+## 性能
+
+| 场景 | 事件量 | 速率 | 归档率 | RSS 内存 |
+|------|--------|------|--------|----------|
+| 75s × 2000eps | 150K | 2000 events/s | **100%** | 38MB |
+| 15min × 1000/s | 882K | 1000 events/s | 99.9% | 18MB |
+| 3min × 5000/s | 884K | 5000 events/s | 100% | 18MB |
+
+> *882K 测试中 0.1% 未归档是热轨缓存中的事件，在测试窗口关闭时尚末被扫描到，**非数据丢失**。归档器持续运行后全部落库。*
 
 ---
 
@@ -210,7 +313,7 @@ python -m pytest tests/ -v
 python -m pytest tests/test_probe_*_mock.py -v
 ```
 
-当前状态：**389 passed, 2 skipped, 0 failed**
+当前状态：**413 passed, 0 skipped, 0 failed**
 
 ---
 
@@ -263,7 +366,7 @@ python -m pytest tests/test_probe_*_mock.py -v
 
 ## 许可
 
-Business Source License 1.1 — 全球年收入低于 10 万美元的公司和个人可免费生产使用。非生产用途（开发、测试、评估）无收入限制。详见 [LICENSE](LICENSE) 文件。
+Business Source License 1.1 — 年收入 <$100K 的公司和个人免费商用，非商用无限制。**2030-12-31 自动转换为 Apache 2.0**。详见 [LICENSE](LICENSE) 文件。
 
 ---
 

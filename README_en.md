@@ -12,7 +12,9 @@
 [![License](https://img.shields.io/badge/license-BUSL--1.1-green.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.11.9m-green.svg)](https://pypi.org/project/mingjing/)
 
-**Mingjing is LIT 1.4's lightweight refraction array, not a standalone diagnostic platform.** It provides zero-intrusion observability for LangChain, LlamaIndex, CrewAI, OpenHands, AutoGPT, and other Agent frameworks via hot-rail JSONL files + SQLite/MySQL persistence layer.
+> **License**: Mingjing uses **Business Source License 1.1**. Free production use for companies/individuals with annual revenue < $100K. Non-production use unrestricted. **Automatically converts to Apache 2.0 on 2030-12-31**.
+
+**Mingjing is LIT 1.4's lightweight refraction array, not a standalone diagnostic platform.** It provides zero-intrusion observability for OpenClaw, Hermes, LangChain, and other Agent frameworks via hot-rail JSONL files + SQLite/MySQL persistence layer (LlamaIndex, CrewAI, OpenHands, AutoGPT adapters are pending community contribution).
 
 ---
 
@@ -71,17 +73,16 @@ ming web start
 │  (stateless) │                          │  (sole writer)│
 └─────────────┘                          └──────┬───────┘
        │                                        │
-       │  LangChain / LlamaIndex                │ SQLite / MySQL
-       │  CrewAI / OpenHands                    ▼
-       │  AutoGPT / Hermes / MCP         ┌──────────────┐
+       │  OpenClaw / Hermes                     │ SQLite / MySQL
+       │  LangChain / LlamaIndex                ▼
+       │  CrewAI / OpenHands / AutoGPT   ┌──────────────┐
        │                                 │  Query       │
        └────────────────────────────────►│  Bridge      │
-                                          └──────┬───────┘
-                                                 │
-                                           ┌─────▼─────┐
-                                           │  Web UI   │
-                                           │  / MCP    │
-                                           └───────────┘
+                                         └──────┬───────┘
+                                                │
+                                          ┌─────▼─────┐
+                                          │  Web UI   │
+                                          └───────────┘
 ```
 
 ### Core Modules
@@ -98,17 +99,117 @@ ming web start
 
 | Adapter | Language | Events |
 |---------|----------|--------|
-| LangChain | Python | llm_invoke, tool_call, memory_retrieve |
-| LlamaIndex | Python | llm_invoke, memory_retrieve, agent_step |
-| CrewAI | Python | agent_step, llm_invoke |
-| OpenHands | Python | agent_step, llm_invoke, tool_call |
-| AutoGPT | Python | agent_step, llm_invoke |
-| Hermes | Python | llm_invoke, tool_call, memory_retrieve |
-| MCP (LIT) | Python | tool_call, memory_retrieve, llm_invoke |
-| OpenClaw | JS | llm_invoke, tool_call, error |
-| Vercel AI SDK | JS | llm_invoke, tool_call |
+| **OpenClaw** | Node.js | llm_invoke, tool_call, error |
+| **Hermes** | Python | llm_invoke, tool_call, memory_retrieve |
+| **LangChain** | Python | llm_invoke, tool_call, memory_retrieve |
+| LlamaIndex | Python | llm_invoke, memory_retrieve, agent_step (pending) |
+| CrewAI | Python | agent_step, llm_invoke (pending) |
+| OpenHands | Python | agent_step, llm_invoke, tool_call (pending) |
+| AutoGPT | Python | agent_step, llm_invoke (pending) |
 
-> All adapters use **monkey-patch + zero third-party dependency** design. Silent degradation when target framework is not installed.
+> All adapters use **monkey-patch + zero third-party dependency** design. Silent degradation when target framework is not installed. Items marked "(pending)" are community contribution directions — PRs welcome.
+
+![OpenClaw Screenshot — Ask about health status anytime](updocs/image/openclawyanshi.png)
+
+---
+
+## Diagnostic Capabilities (50 Example Diseases)
+
+Mingjing includes **157 disease detection rules**. Below are 50 examples automatically detectable when running with OpenClaw:
+
+### System Layer
+
+| ID | Disease | Severity | Description |
+|----|---------|----------|-------------|
+| SYS-002 | OOM (Out of Memory) | P0 | Process memory overflow, likely insufficient memory or memory leak |
+| SYS-003 | Memory Leak (Growth) | P1 | Recent average RSS significantly higher than early average (≥1.8x) |
+| SYS-004 | Virtual Memory Swell | P2 | Virtual memory far exceeds physical memory (Node.js threshold 30GB) |
+| SYS-005 | FD Leak | P1 | File descriptor count growing continuously, possible unclosed files/connections |
+| SYS-006 | Thread Explosion | P1 | Thread count growing abnormally, may cause context switch overhead explosion |
+| SYS-007 | Disk Space Low | P1 | Remaining disk space below 500MB, log writes may fail |
+| SYS-008 | Silent Anomaly (Zombie) | P1 | PID alive but no events emitted for 10 minutes, possibly zombie |
+| SYS-013 | Archiver Dead | P0 | Archiver heartbeat stopped, events cannot be persisted |
+| SYS-017 | CPU Load High | P1 | 1-minute load exceeds 80% of CPU cores |
+| SYS-019 | CPU Load Spike | P1 | 1-minute load suddenly spikes 3x, possible CPU storm |
+| SYS-032 | Token Consumption Spike | P1 | Token consumption in last 5 min exceeds 3x baseline |
+
+### Network Layer
+
+| ID | Disease | Severity | Description |
+|----|---------|----------|-------------|
+| NET-017 | TCP Connection Failure | P0 | Network unreachable or target host unreachable |
+| NET-018 | DNS Resolution Failure | P0 | Domain name cannot be resolved, possible DNS server failure |
+| NET-020 | HTTP 5xx Server Error | P1 | Target service frequently returns 5xx, service may be unstable |
+| NET-021 | Specific Host High Failure | P1 | Specific target host error rate exceeds 30% |
+| NET-024 | Network Partition (Not LLM Latency) | P1 | Network layer connection failure causes LLM unavailability, not model latency |
+| NET-027 | Connection Pool Exhaustion | P1 | Concurrent connections to same target host too high, possible pool exhaustion |
+| NET-029 | LLM Rate Limit | P1 | LLM API returns 429, rate limit triggered |
+| NET-030 | LLM Auth Failure | P0 | API Key expired or no permission, business immediately interrupted |
+| NET-031 | LLM Service Overloaded | P1 | LLM API returns 503, server overloaded/maintenance |
+| NET-032 | LLM Server Internal Error | P1 | LLM API returns 500, model inference anomaly or backend crash |
+
+### Model Layer
+
+| ID | Disease | Severity | Description |
+|----|---------|----------|-------------|
+| MDL-029 | LLM Output Truncated | P2 | Output truncated due to token limit, may need to increase max_tokens |
+| MDL-030 | LLM Content Filtered | P1 | Output blocked by content filter, may trigger security policy |
+| MDL-031 | LLM Empty Response | P2 | Returns 200 but no output content, possible prompt issue |
+| MDL-032 | Prompt Bloat | P2 | Input tokens far exceed output, prompt may be too verbose |
+| MDL-033 | Specific Model High Latency | P1 | Specific model response latency exceeds 5 seconds |
+| MDL-036 | Inference Cost Out of Control | P1 | Token consumption exceeds threshold, check for loops or model fallback |
+| MDL-039 | LLM Idle (No Tool Calls) | P1 | Multiple LLM calls without tool call follow-up, possible reasoning loop |
+| MDL-040 | Model API Key Not Configured | P0 | API key missing or invalid, all LLM calls will fail |
+| MDL-041 | Model Cache Hit Rate Low | P2 | Over 90% of LLM calls miss cache, possible cache strategy failure |
+
+### Tool Layer
+
+| ID | Disease | Severity | Description |
+|----|---------|----------|-------------|
+| TLT-039 | Tool Call Timeout | P1 | Tool call timed out, dependent service may be unavailable |
+| TLT-043 | Tool Succeeds But Downstream Fails | P1 | Tool call succeeded but subsequent errors, downstream dependency issue |
+| TLT-044 | Tool Permission Denied | P1 | Tool call failed due to insufficient permissions |
+| TLT-046 | Wrong Tool Selection | P2 | Tool failed frequently (3+ times), possibly wrong tool or bad params |
+| TLT-047 | Tool Consecutive Failures | P1 | Same tool failed 3+ times within 5 minutes |
+| TLT-048 | Tool Permission Escalation | P0 | Agent called high-risk tool, immediately check permission config |
+| TLT-052 | Extended Unresponsiveness | P1 | Agent step started but not finished for over 2 minutes |
+| TLT-058 | Dangerous Tool Call | P0 | Agent called high-risk system command, may cause irreversible impact |
+| TLT-060 | Tool Input Loop | P1 | Same parameters appear ≥ 5 times in same session, possible call loop |
+
+### Agent Layer
+
+| ID | Disease | Severity | Description |
+|----|---------|----------|-------------|
+| AGT-058 | Multi-Agent Communication Overhead | P1 | LLM call frequency and Token consumption growing O(N²) |
+| AGT-062 | Error Propagation & Cascading Collapse | P0 | Same error type appears frequently, may trigger cascading collapse |
+| AGT-063 | Weak Failure Recovery | P0 | Same error type repeats without recovery events |
+| AGT-067 | Agent Max Rounds Reached | P2 | Agent reached max reasoning round limit, task forced to abort |
+| AGT-071 | Agent Component High Error Rate | P2 | Reasoning module component errors ≥ 5 times, possible systemic issue |
+
+### Probe & Data Quality
+
+| ID | Disease | Severity | Description |
+|----|---------|----------|-------------|
+| PRB-078 | Probe Persistent Packet Loss | P1 | Probe dropping packets, possible buffer full or slow disk |
+| PRB-079 | Hash Chain Corruption | P0 | Hash chain integrity check failed, data may be tampered |
+| PRB-081 | Probe Buffer Backlog | P1 | Probe buffer growing continuously, archiver may be slow |
+| PRB-082 | Probe Self-Error Accumulation | P2 | Probe self-errors frequent, may affect data quality |
+| DQT-086 | Anomaly Type Frequency Spike | P1 | Same error type appears 10+ times within 5 minutes |
+| DQT-087 | Stack Pattern Repetition | P2 | Same stack trace appears frequently, possibly same root cause |
+
+> **Full 157 disease definitions** in [`config/diseases.yaml`](config/diseases.yaml). Run `ming dx list` to view current system diagnostics.
+
+---
+
+## Performance
+
+| Scenario | Events | Rate | Archive Rate | RSS Memory |
+|----------|--------|------|-------------|------------|
+| 75s × 2000eps | 150K | 2000 events/s | **100%** | 38MB |
+| 15min × 1000/s | 882K | 1000 events/s | 99.9% | 18MB |
+| 3min × 5000/s | 884K | 5000 events/s | 100% | 18MB |
+
+> *The 0.1% gap in the 882K test is due to hot-rail cached events not yet scanned when the test window closed — **not data loss**. The archiver persists all events once running continuously.*
 
 ---
 
@@ -137,19 +238,9 @@ ming web start
 
 ---
 
-## Performance
-
-| Scenario | Events | Archive Rate | RSS Memory |
-|----------|--------|-------------|------------|
-| 15min × 1000/s | 882K | 99.9% | 18MB |
-| 3min × 5000/s | 884K | 100% | 18MB |
-| 75s × 2000/s (150K) | 150K | 100% | **38MB** |
-
----
-
 ## License
 
-**Business Source License 1.1** — Free for production use by companies and individuals with global annual revenue < $100K. Non-production use (development, testing, evaluation) has no revenue limit.
+**Business Source License 1.1** — Free production use for companies/individuals with annual revenue < $100K. Non-production use unrestricted. **Automatically converts to Apache 2.0 on 2030-12-31**. See [LICENSE](LICENSE) for details.
 
 ---
 
