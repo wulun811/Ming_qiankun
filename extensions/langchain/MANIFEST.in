@@ -1,5 +1,6 @@
 include ming_probe_langchain.pth
 include README.md
+include LICENSE
 graft ming_probe_langchain
 global-exclude __pycache__
 global-exclude *.pyc

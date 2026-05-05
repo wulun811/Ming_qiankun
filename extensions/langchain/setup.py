@@ -9,11 +9,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 setup(
     name="ming-probe-langchain",
-    version="0.11.9m",
+    version="0.11.9.post1",
     description="乾坤镜 LangChain 自动探针 —— pip install 即插即用，零代码侵入",
     long_description=open(os.path.join(HERE, "README.md"), encoding="utf-8").read(),
     long_description_content_type="text/markdown",
-    license="MIT",
+    license="BSL 1.1",
     author="乾坤镜 team",
     python_requires=">=3.10",
     packages=find_packages(),
@@ -24,12 +24,11 @@ setup(
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
-        "License :: OSI Approved :: MIT License",
+        "License :: Other/Proprietary License",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
-        "Topic :: Software Development :: Monitoring",
     ],
     keywords=["langchain", "observability", "diagnostic", "mingjing", "乾坤镜"],
     project_urls={

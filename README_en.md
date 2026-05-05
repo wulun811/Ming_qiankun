@@ -6,6 +6,8 @@
 
 ![Mingjing LOGO](updocs/image/logo.png)
 
+![Architecture](updocs/image/mingimageen.png)
+
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-green.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.11.9m-green.svg)](https://pypi.org/project/mingjing/)

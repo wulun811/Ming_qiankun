@@ -6,6 +6,8 @@
 
 ![乾坤镜 LOGO](updocs/image/logo.png)
 
+![架构图](updocs/image/mingimage.png)
+
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-green.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.11.9m-green.svg)](https://github.com/wulun811/Ming_qiankun/releases)
@@ -18,9 +20,13 @@
 
 ## 5 分钟上手
 
-### 1. 克隆
+### 1. 安装
 
 ```bash
+# 方式一：PyPI 安装（推荐）
+pip install mingjing
+
+# 方式二：从源码克隆
 git clone https://github.com/wulun811/Ming_qiankun.git
 cd Ming_qiankun
 ```

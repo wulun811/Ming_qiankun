@@ -137,4 +137,4 @@ PEP 302 import hook 机制，在 `langchain_core` 首次导入时自动注入。
 
 ## 许可
 
-MIT
+Business Source License 1.1 — 与乾坤镜主包一致。全球年收入低于 $100,000 USD 的公司和个人可免费生产使用。详见主仓库 [LICENSE](../../LICENSE) 文件。
