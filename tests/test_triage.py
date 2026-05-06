@@ -49,7 +49,18 @@ class TestScanSqlite(unittest.TestCase):
                 system TEXT,
                 event_type TEXT,
                 payload TEXT,
-                timestamp REAL
+                timestamp REAL,
+                storage_tier INTEGER DEFAULT 0
+            )
+        """)
+        self.conn.execute("""
+            CREATE TABLE events_blob (
+                event_id INTEGER PRIMARY KEY,
+                payload_hash TEXT,
+                storage_tier INTEGER DEFAULT 0,
+                compression_ratio REAL,
+                payload_blob BLOB,
+                FOREIGN KEY (event_id) REFERENCES events(id)
             )
         """)
 
@@ -250,7 +261,18 @@ class TestTriageRun(unittest.TestCase):
                 system TEXT,
                 event_type TEXT,
                 payload TEXT,
-                timestamp REAL
+                timestamp REAL,
+                storage_tier INTEGER DEFAULT 0
+            )
+        """)
+        self.conn.execute("""
+            CREATE TABLE events_blob (
+                event_id INTEGER PRIMARY KEY,
+                payload_hash TEXT,
+                storage_tier INTEGER DEFAULT 0,
+                compression_ratio REAL,
+                payload_blob BLOB,
+                FOREIGN KEY (event_id) REFERENCES events(id)
             )
         """)
         now = time.time()

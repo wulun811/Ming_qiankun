@@ -82,6 +82,8 @@ class ABFilter:
             "SELECT DISTINCT payload FROM events WHERE event_type = ? LIMIT 50",
             (fault_pattern,),
         )
-        solutions = list(set(str(row[0]) for row in cur.fetchall()))
+        solutions = list(
+            set(str(row[0]) for row in cur.fetchall() if row[0] is not None)
+        )
         conn.close()
         return solutions

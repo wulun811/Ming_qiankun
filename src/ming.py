@@ -11,11 +11,26 @@ import time
 import json
 import signal
 import subprocess
+import gc
+import ctypes
 from pathlib import Path
 
 MODE = os.getenv("MING_MODE", "standalone").lower()
 PID_FILE = Path.home() / ".ming" / f"{MODE}.pid"
 LOG_FILE = Path.home() / ".ming" / f"{MODE}.log"
+
+try:
+    from importlib.metadata import version as _pv
+
+    VERSION = _pv("mingjing")
+except Exception:
+    _pp = Path(__file__).parent.parent / "pyproject.toml"
+    VERSION = "0.0.0"
+    if _pp.exists():
+        for _l in _pp.read_text().splitlines():
+            if "version" in _l:
+                VERSION = _l.split("=")[1].strip().strip('"').strip("'")
+                break
 
 _archiver = None
 _pool = None
@@ -184,9 +199,17 @@ def start_standalone():
     signal.signal(signal.SIGTERM, _graceful_shutdown)
     signal.signal(signal.SIGINT, _graceful_shutdown)
 
+    _libc = ctypes.CDLL("libc.so.6")
+    _trim_counter = 0
+
     try:
         while True:
             time.sleep(1)
+            _trim_counter += 1
+            if _trim_counter >= 300:
+                _trim_counter = 0
+                gc.collect()
+                _libc.malloc_trim(0)
             if not _archiver._alive:
                 now = time.time()
                 if now - last_restart < restart_cooldown:
@@ -545,25 +568,58 @@ def cmd_uninstall_service():
         _log(f"卸载失败: {e}")
 
 
+def cmd_upgrade():
+    """升级到最新版并自动重启"""
+    old = VERSION
+    print(f"乾坤镜 v{old}")
+    r = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "--upgrade", "mingjing"],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if r.returncode:
+        print(f"升级失败: {r.stderr.strip() or r.stdout.strip()}")
+        sys.exit(1)
+    out = (r.stdout or "").lower()
+    if "already up-to-date" in out or "already satisfied" in out:
+        print(f"已是最新版 v{old}")
+        return
+    try:
+        from importlib.metadata import version as _v2
+
+        new = _v2("mingjing")
+    except Exception:
+        new = old
+    print(f"升级成功: v{old} → v{new}")
+    if PID_FILE.exists():
+        print("重启服务...")
+        cmd_restart()
+    else:
+        r2 = subprocess.run(
+            ["sudo", "systemctl", "restart", "ming-archiver"],
+            capture_output=True,
+            timeout=15,
+        )
+        print("已重启（systemd）" if r2.returncode == 0 else "启动: ming start")
+
+
 def cmd_main():
     """主入口"""
     if len(sys.argv) < 2:
-        print("用法: python3 src/ming.py [start|stop|status|restart|web|service]")
-        print("      python3 src/ming.py start [--daemon]  # --daemon 后台运行不阻塞")
-        print("      python3 src/ming.py service install    # 注册 systemd 开机自启")
-        print(f"当前模式: {MODE} (设置 MING_MODE 环境变量切换)")
+        print(f"乾坤镜 v{VERSION}")
+        print("start|stop|restart|status|upgrade|web|service")
+        print(f"模式: {MODE} (MING_MODE)")
         sys.exit(1)
 
     cmd = sys.argv[1]
     if cmd in ("--help", "-h"):
-        print("用法: python3 src/ming.py [start|stop|status|restart|web|service]")
-        print("      python3 src/ming.py start [--daemon]")
-        print("      python3 src/ming.py service install")
-        print("      python3 src/ming.py web start [--port PORT]")
-        print(f"当前模式: {MODE} (设置 MING_MODE 环境变量切换)")
+        print(f"乾坤镜 v{VERSION}")
+        print("start|stop|restart|status|upgrade|web|service")
+        print(f"模式: {MODE} (MING_MODE)")
         sys.exit(0)
     if cmd in ("--version", "-v"):
-        print("ming 0.11.9m")
+        print(f"ming {VERSION}")
         sys.exit(0)
     if cmd == "start":
         cmd_start()
@@ -571,6 +627,8 @@ def cmd_main():
         cmd_stop()
     elif cmd == "restart":
         cmd_restart()
+    elif cmd == "upgrade":
+        cmd_upgrade()
     elif cmd == "status":
         cmd_status()
     elif cmd == "web":

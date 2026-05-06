@@ -104,6 +104,19 @@ def build_llm_event(
     }
 
 
+def _maybe_truncate(val, max_len=2000):
+    if val is None:
+        return None
+    s = (
+        json.dumps(val, sort_keys=True, default=str)
+        if not isinstance(val, str)
+        else val
+    )
+    if len(s) > max_len:
+        return s[:max_len] + f"...[truncated {len(s) - max_len} chars]"
+    return val
+
+
 def build_tool_event(
     step_id=None,
     session_id=None,
@@ -123,7 +136,7 @@ def build_tool_event(
         },
         "layer_tool": {
             "tool_name": tool_name,
-            "tool_args": tool_args or {},
+            "tool_args": _maybe_truncate(tool_args, 2000),
             "tool_result": str(tool_result)[:500] if tool_result else None,
             "execution_ms": execution_ms,
             "tool_status": "success" if success else "fail",

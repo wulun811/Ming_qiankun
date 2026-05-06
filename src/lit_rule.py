@@ -5,6 +5,7 @@ import json
 import time
 import os
 from pathlib import Path
+from archiver_compress import resolve_payload
 
 TRIAGE_SNAPSHOT = Path.home() / ".ming" / "triage_snapshot.json"
 DISEASES_YAML = Path(__file__).parent.parent / "config" / "diseases.yaml"
@@ -139,6 +140,11 @@ def _yaml_value(val):
             return json.loads(val)
         except json.JSONDecodeError:
             pass
+    if val.startswith("{") and val.endswith("}"):
+        try:
+            return json.loads(val, parse_float=float)
+        except json.JSONDecodeError:
+            pass
     return val
 
 
@@ -237,14 +243,40 @@ def resolve_env_sql(sql: str, rule: dict, env_profile: dict) -> str:
     return sql
 
 
+def resolve_per_system(rule: dict, system_name: str) -> dict:
+    """Check per_system overrides for a given system.
+    Returns {"enabled": True/False, "confidence_multiplier": float} with defaults."""
+    result = {"enabled": True, "confidence_multiplier": 1.0}
+    per = rule.get("per_system", {})
+    if not per:
+        return result
+    cfg = None
+    for key, val in per.items():
+        if system_name == key or system_name.startswith(key + "_"):
+            cfg = val
+            break
+    if cfg is None:
+        return result
+    if cfg.get("enabled") is False:
+        result["enabled"] = False
+    cm = cfg.get("confidence_multiplier")
+    if cm is not None:
+        result["confidence_multiplier"] = float(cm)
+    return result
+
+
 def _load_env_profile(conn) -> dict:
     try:
         row = conn.execute(
-            "SELECT payload FROM events WHERE event_type='platform_profile' "
-            "ORDER BY timestamp DESC LIMIT 1"
+            "SELECT e.payload, e.storage_tier, b.payload_blob "
+            "FROM events e LEFT JOIN events_blob b ON e.id = b.event_id "
+            "WHERE e.event_type='platform_profile' "
+            "ORDER BY e.timestamp DESC LIMIT 1"
         ).fetchone()
         if row:
-            return json.loads(row[0])
+            pl = resolve_payload(row)
+            if pl:
+                return pl
     except Exception:
         pass
     return {}

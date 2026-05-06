@@ -428,12 +428,17 @@ class T08_HashChain(unittest.TestCase):
                 if stored_prev != prev_hash:
                     broken.append((id_, "prev_hash mismatch", stored_prev, prev_hash))
 
-                # 与归档器一致的哈希计算方式
+                # 与归档器一致的哈希计算方式（v0.11.10: payload_hash 替代 payload）
+                payload_dict = json.loads(payload)
+                payload_text = json.dumps(
+                    payload_dict, ensure_ascii=False, sort_keys=True
+                )
+                payload_hash = hashlib.sha256(payload_text.encode("utf-8")).hexdigest()
                 content = json.dumps(
                     {
                         "system": system,
                         "event_type": event_type,
-                        "payload": json.loads(payload),
+                        "payload_hash": payload_hash,
                         "timestamp": timestamp,
                     },
                     sort_keys=True,

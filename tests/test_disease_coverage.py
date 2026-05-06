@@ -199,7 +199,7 @@ class TestL1_CoreDiseases(unittest.TestCase):
         )
 
     def test_MDL_036_cost_runaway(self):
-        """MDL-036: 成本失控 — 1 小时内 token 总和 > 100,000"""
+        """MDL-036: 成本失控 — 1 小时内 token 总和 > 500,000"""
         now = time.time()
         for i in range(20):
             inject_event(
@@ -208,8 +208,8 @@ class TestL1_CoreDiseases(unittest.TestCase):
                 {
                     "layer_llm": {
                         "model": "gpt-4",
-                        "input_tokens": 5000,
-                        "output_tokens": 3000,
+                        "input_tokens": 20000,
+                        "output_tokens": 15000,
                         "latency_ms": 200,
                     },
                     "layer_network": {
@@ -396,8 +396,8 @@ class TestL2_RuleFamilies(unittest.TestCase):
             has_diagnosis("MDL-035", "test_sys"), "MDL-035 恰好 5 次不应触发"
         )
 
-    def test_MDL_036_boundary_100k_tokens(self):
-        """MDL-036 边界：恰好 100,000 tokens 不应触发（需要 > 100,000）"""
+    def test_MDL_036_boundary_500k_tokens(self):
+        """MDL-036 边界：恰好 500,000 tokens 不应触发（需要 > 500,000）"""
         now = time.time()
         inject_event(
             "test_sys",
@@ -405,8 +405,8 @@ class TestL2_RuleFamilies(unittest.TestCase):
             {
                 "layer_llm": {
                     "model": "gpt-4",
-                    "input_tokens": 50000,
-                    "output_tokens": 50000,
+                    "input_tokens": 250000,
+                    "output_tokens": 250000,
                     "latency_ms": 200,
                 },
                 "layer_network": {"target_host": "api.openai.com", "status_code": 200},
@@ -416,7 +416,7 @@ class TestL2_RuleFamilies(unittest.TestCase):
 
         run_diagnose()
         self.assertFalse(
-            has_diagnosis("MDL-036", "test_sys"), "MDL-036 恰好 100k tokens 不应触发"
+            has_diagnosis("MDL-036", "test_sys"), "MDL-036 恰好 500k tokens 不应触发"
         )
 
     def test_NET_024_no_trigger_on_tcp_success(self):

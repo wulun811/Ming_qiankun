@@ -6,6 +6,7 @@
 import sqlite3, json, time, os, re
 from pathlib import Path
 from collections import defaultdict
+from archiver_compress import resolve_payload
 
 DB = Path.home() / ".ming" / "ming.db"
 DISEASES_YAML = Path(__file__).parent.parent / "config" / "diseases.yaml"
@@ -36,32 +37,47 @@ def flatten_payload(payload_str: str) -> set:
         return set()
 
 
+def _resolve_sample_payload(row):
+    raw = row[0]
+    if raw is not None:
+        return json.loads(raw)
+    if len(row) >= 3 and row[1] == 1 and row[2]:
+        return resolve_payload({"payload_blob": row[2]}, blob_col="payload_blob")
+    return None
+
+
 def stratified_sample(conn, event_type: str) -> list:
     total = conn.execute(
         "SELECT COUNT(*) FROM events WHERE event_type=?", (event_type,)
     ).fetchone()[0]
 
+    join = "LEFT JOIN events_blob ON events.id = events_blob.event_id"
+    cols = "events.payload, events.storage_tier, events_blob.payload_blob"
+
     if total <= SAMPLE_THRESHOLD:
-        return conn.execute(
-            "SELECT payload FROM events WHERE event_type=?", (event_type,)
+        rows = conn.execute(
+            f"SELECT {cols} FROM events {join} WHERE events.event_type=?", (event_type,)
         ).fetchall()
-
-    recent = conn.execute(
-        "SELECT payload FROM events WHERE event_type=? ORDER BY timestamp DESC LIMIT ?",
-        (event_type, SAMPLE_RECENT),
-    ).fetchall()
-
-    random_rows = conn.execute(
-        "SELECT payload FROM events WHERE event_type=? ORDER BY RANDOM() LIMIT ?",
-        (event_type, SAMPLE_RANDOM),
-    ).fetchall()
+    else:
+        recent = conn.execute(
+            f"SELECT {cols} FROM events {join} WHERE events.event_type=? ORDER BY events.timestamp DESC LIMIT ?",
+            (event_type, SAMPLE_RECENT),
+        ).fetchall()
+        random_rows = conn.execute(
+            f"SELECT {cols} FROM events {join} WHERE events.event_type=? ORDER BY RANDOM() LIMIT ?",
+            (event_type, SAMPLE_RANDOM),
+        ).fetchall()
+        rows = recent + random_rows
 
     seen = set()
     result = []
-    for row in recent + random_rows:
-        if row[0] not in seen:
-            seen.add(row[0])
-            result.append(row)
+    for row in rows:
+        payload = _resolve_sample_payload(row)
+        if payload is not None:
+            payload_str = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+            if payload_str not in seen:
+                seen.add(payload_str)
+                result.append((payload_str,))
     return result
 
 

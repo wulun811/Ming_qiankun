@@ -101,7 +101,7 @@ Business System → probe_uni.py → JSONL Hot Rail → archiver.py → SQLite/M
 | **Runtime memory** | RSS < 40MB, zero deps | Unique tier |
 | **Intrusiveness** | monkey-patch silent degradation | Unique tier |
 | **Auto-diagnosis** | 157<!--M=disease_rules--> rules | Competitors output metrics only |
-| **Diagnosis-prescription separation** | lit_lite → Web Dashboard → Human/MCP review | Unique tier |
+| **Diagnosis-prescription separation** | lit_lite → Web Dashboard → Human/LIT review | Unique tier |
 | **Cross-framework unified** | 16+ adapters | Competitors are framework-bound |
 | **Evidence chain audit** | SHA-256 hash chain | Not available |
 

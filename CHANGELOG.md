@@ -1,5 +1,36 @@
 # Changelog
 
+## [v0.11.10] — 2026-05-07
+
+### Added
+- Three-tier storage compression (zlib): hot (7d tier-0) → warm (compress tier-1) → summary (monthly tier-2)
+- `archiver_compress.py`: compression/decompression + hash chain + transparent `resolve_payload()`
+- `archiver_summary.py`: monthly summary aggregation + `--month` CLI report
+- `scripts/compress_tools.py`: backfill/verify/downgrade utilities
+- `ming upgrade`: one-click `pip install --upgrade mingjing` + auto-restart
+- `_find_real_pid()`: process memory tracking for wrapper daemons (probe vs main engine)
+- CLI help text + `--version` now reads from package metadata
+
+### Fixed
+- Web dashboard token statistics: all `json_extract(payload, ...)` replaced with `LEFT JOIN events_blob` + `resolve_payload()` decompression
+- QueryBridge (6 methods): same pattern — `query_token_breakdown`, `query_token_spike`, `query_tool_dangerous`, `query_step_sequence`, `query_step_loop`, `query_memory_retrieve`
+- `test_full_uninstall`: backup assertion synced to current behavior
+- Test triage setup: added `events_blob` table + `storage_tier` column
+- README badges: 403→430 tests
+- Frontend version display: v0.11.9m → v0.11.10
+- opencode memory tracking shows probe daemon (~21MB) + main engine (~826MB) separately
+
+### Changed
+- Base budget: 6 core files, 997 lines (< 2000 budget)
+- 6 optional modules use `ImportError` pattern (delete file = disable)
+- Schema auto-migration: `ALTER TABLE ... ADD COLUMN` with `try/except`
+
+### Performance
+- DB size: 267 MB → 196 MB after VACUUM (−26.7%)
+- zlib compression ratio: 43.8% (100.2 MB text → 56.3 MB blob)
+- Zero failures across 212,795 historical events
+- Transparent decompression: zero overhead for tier-0 reads
+
 ## [v0.11.9m] — 2026-05-05
 
 ### Added

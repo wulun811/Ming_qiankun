@@ -68,7 +68,7 @@
 | `probe_openhands.py` | OpenHands | agent_step, llm_invoke, tool_call |
 | `probe_autogpt.py` | AutoGPT | agent_step, llm_invoke |
 | `extensions/hermes/` | Hermes Agent | llm_invoke, tool_call, memory_retrieve |
-| `probe_lit.py` | LIT / MCP | tool_call, memory_retrieve, llm_invoke |
+| `probe_lit.py` | LIT | tool_call, memory_retrieve, llm_invoke |
 | `probe_opencode_wrapper.py` | OpenCode | llm_invoke, tool_call, memory_retrieve |
 
 ### 2.2 JavaScript Adapters

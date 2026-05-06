@@ -1,4 +1,4 @@
-# server.py —— v0.11.9m 前端插件 HTTP 服务
+# server.py —— v0.11.10 前端插件 HTTP 服务
 # 职责：提供静态文件服务 + /api/data.json 端点
 # 依赖：标准库 only（http.server, json, webbrowser, threading）
 # 用法:
@@ -10,7 +10,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
-KNOWN_PROBES = {"tusunsun", "langchain", "openclaw", "mingjing"}
+KNOWN_PROBES = {"tusunsun", "langchain", "openclaw", "mingjing", "opencode"}
 
 
 def _is_known(s):

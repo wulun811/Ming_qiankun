@@ -4,7 +4,7 @@
 import time
 
 
-def purge_expired(conn, tbl, cutoff_days=90):
+def purge_expired(conn, tbl, cutoff_days=60):
     """清理超过 cutoff_days 天的事件，保护关联诊断引用的记录"""
     protected = set()
     try:

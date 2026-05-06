@@ -16,6 +16,8 @@ TOUCH_INTERVAL = 30
 HEALTH_INTERVAL = 60
 SCHEMA_VERSION = "0.11.9m"
 
+_OPCODE_DB_SCHEMA_CHECKED = False
+
 _lamport = 0
 _lamport_lock = threading.Lock()
 
@@ -48,15 +50,17 @@ _emit_count = 0
 _drop_count = 0
 
 
-def emit(event_type, payload):
+def emit(event_type, payload, ts=None):
     global _emit_count, _drop_count
     HOT_DIR.mkdir(parents=True, exist_ok=True)
+    if ts is not None and ts > 1e12:
+        ts = ts / 1000.0
     ev = {
         "system": "opencode",
         "mode": "black",
         "event_type": event_type,
         "payload": payload,
-        "timestamp": time.time(),
+        "timestamp": ts if ts else time.time(),
         "monotonic_ms": time.monotonic() * 1000,
         "lamport": _next_lamport(),
         "_pid": os.getpid(),
@@ -93,6 +97,7 @@ def save_cursor(c):
 
 
 def connect_db():
+    global _OPCODE_DB_SCHEMA_CHECKED
     if not DB_PATH.exists():
         return None
     try:
@@ -100,9 +105,49 @@ def connect_db():
             f"file:{DB_PATH}?mode=ro", uri=True, timeout=1, check_same_thread=False
         )
         conn.execute("PRAGMA query_only = ON")
+        if not _OPCODE_DB_SCHEMA_CHECKED:
+            _check_opencode_schema(conn)
+            _OPCODE_DB_SCHEMA_CHECKED = True
         return conn
     except sqlite3.Error:
         return None
+
+
+def _check_opencode_schema(conn):
+    expected = {
+        "message": {"id", "session_id", "data", "time_created"},
+        "part": {"id", "session_id", "data", "time_created"},
+    }
+    try:
+        cursor = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('message', 'part')"
+        )
+        found = {row[0] for row in cursor.fetchall()}
+        missing_tables = set(expected) - found
+        if missing_tables:
+            print(
+                f"[MING-WARN] opencode DB missing tables: {missing_tables}. "
+                f"This probe requires OpenCode schema v1.x (tested up to v1.3.13). "
+                f"Upgrade opencode may have changed the schema.",
+                file=sys.stderr,
+            )
+            return
+        for tbl, expected_cols in expected.items():
+            col_info = conn.execute(f"PRAGMA table_info({tbl})").fetchall()
+            actual_cols = {row[1] for row in col_info}
+            missing_cols = expected_cols - actual_cols
+            if missing_cols:
+                print(
+                    f"[MING-WARN] opencode DB table '{tbl}' missing columns: {missing_cols}. "
+                    f"OpenCode upgrade may have changed schema (tested up to v1.3.13). "
+                    f"Probe will likely produce no data.",
+                    file=sys.stderr,
+                )
+    except sqlite3.Error as e:
+        print(
+            f"[MING-WARN] Could not verify opencode DB schema: {e}",
+            file=sys.stderr,
+        )
 
 
 def _get_content_max_len():
@@ -303,11 +348,11 @@ def poll_parts(conn, cursor, limit=500):
 def _poll_and_emit(conn, cursor):
     msgs = poll_messages(conn, cursor)
     for event_type, payload, ts, rid in msgs:
-        emit(event_type, payload)
+        emit(event_type, payload, ts)
         cursor["message"] = {"ts": ts, "id": rid}
     parts = poll_parts(conn, cursor)
     for event_type, payload, ts, rid in parts:
-        emit(event_type, payload)
+        emit(event_type, payload, ts)
         cursor["part"] = {"ts": ts, "id": rid}
     if msgs or parts:
         save_cursor(cursor)

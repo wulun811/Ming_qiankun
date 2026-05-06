@@ -1,20 +1,36 @@
 # 乾坤镜 Mingjing
 
+> **仓库** `Ming_qiankun` · **PyPI** `mingjing` · **CLI** `ming`
+>
 > **AI Agent 诊断折射阵列** — 零侵入观测 LLM 调用、工具执行、记忆检索与 Agent 编排。
 >
 > [🌏 English](./README_en.md) | [📖 完整手册](updocs/)
+
+[![PyPI](https://img.shields.io/pypi/v/mingjing?color=blue)](https://pypi.org/project/mingjing/)
+[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-BUSL--1.1-green.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-430%2F0%2F0-brightgreen)]()
+
+[![Dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen)]()
+[![Efficiency](https://img.shields.io/badge/0_LLM_·_0_Writeback_·_RSS%3C50MB-brightgreen)]()
+[![Storage](https://img.shields.io/badge/212K_events-196MB-brightgreen)]()
+[![Compression](https://img.shields.io/badge/v0.11.10_Compression-43%25-brightgreen)]()
+[![PRs](https://img.shields.io/badge/PRs-welcome-orange)](https://github.com/wulun811/Ming_qiankun/pulls)
+
+[![OpenClaw](https://img.shields.io/badge/OpenClaw-%E2%9C%93_verified-brightgreen)]()
+[![OpenCode](https://img.shields.io/badge/OpenCode-%E2%9C%93_verified-brightgreen)]()
+[![Hermes](https://img.shields.io/badge/Hermes-%E2%9C%93_verified-brightgreen)]()
+[![LangChain](https://img.shields.io/badge/LangChain-%E2%9C%93_verified-brightgreen)]()
+
+> **许可声明**：乾坤镜采用 **Business Source License 1.1**。年收入 <$100K 的公司和个人免费商用，非商用无限制。**2030-12-31 自动转换为 Apache 2.0**。
+
+**乾坤镜是 LIT 1.4 的轻量折射阵列，不是独立诊断中台。** 它通过热轨 JSONL 文件 + SQLite/MySQL 持久层，为 OpenClaw、Hermes、LangChain 等 Agent 框架提供无侵入的可观测性（LlamaIndex、CrewAI、OpenHands、AutoGPT 适配器尚在社区适配中）。
 
 ![乾坤镜 LOGO](updocs/image/logo.png)
 
 ![架构图](updocs/image/mingimage.png)
 
-[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-BUSL--1.1-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.11.9m-green.svg)](https://github.com/wulun811/Ming_qiankun/releases)
-
-> **许可声明**：乾坤镜采用 **Business Source License 1.1**。年收入 <$100K 的公司和个人免费商用，非商用无限制。**2030-12-31 自动转换为 Apache 2.0**。
-
-**乾坤镜是 LIT 1.4 的轻量折射阵列，不是独立诊断中台。** 它通过热轨 JSONL 文件 + SQLite/MySQL 持久层，为 OpenClaw、Hermes、LangChain 等 Agent 框架提供无侵入的可观测性（LlamaIndex、CrewAI、OpenHands、AutoGPT 适配器尚在社区适配中）。
+![Web 面板截图](updocs/image/jietu.jpg)
 
 ---
 
@@ -134,17 +150,31 @@ docker run -d --name ming -p 18088:18088 ming
 
 ### 适配器（官方参考实现）
 
-| 适配器 | 语言 | 事件类型 |
-|--------|------|----------|
-| **OpenClaw** | Node.js | llm_invoke, tool_call, error |
-| **Hermes** | Python | llm_invoke, tool_call, memory_retrieve |
-| **LangChain** | Python | llm_invoke, tool_call, memory_retrieve |
-| LlamaIndex | Python | llm_invoke, memory_retrieve, agent_step (待适配) |
-| CrewAI | Python | agent_step, llm_invoke (待适配) |
-| OpenHands | Python | agent_step, llm_invoke, tool_call (待适配) |
-| AutoGPT | Python | agent_step, llm_invoke (待适配) |
+| 适配器 | 语言 | 事件类型 | 实现方式 |
+|--------|------|----------|----------|
+| **OpenClaw** | Node.js | llm_invoke, tool_call, error | Node.js 插件 |
+| **OpenCode** | Python | llm_invoke, tool_call, error | DB 轮询包装器 |
+| **Hermes** | Python | llm_invoke, tool_call, memory_retrieve | Hermes Skill |
+| **LangChain** | Python | llm_invoke, tool_call, memory_retrieve | Pip 包 + monkey-patch |
+| LlamaIndex | Python | llm_invoke, memory_retrieve, agent_step (待适配) | — |
+| CrewAI | Python | agent_step, llm_invoke (待适配) | — |
+| OpenHands | Python | agent_step, llm_invoke, tool_call (待适配) | — |
+| AutoGPT | Python | agent_step, llm_invoke (待适配) | — |
 
-> 所有适配器采用 **monkey-patch + 零第三方依赖** 设计。未安装目标框架时静默降级，不影响主流程。标记"待适配"的为社区贡献方向，欢迎 PR。
+> 标记"待适配"的为社区贡献方向，欢迎 PR。
+
+### 适配器升级检查清单
+
+升级宿主平台（OpenClaw / OpenCode / Hermes / LangChain）后，按以下步骤验证探针是否正常工作：
+
+| 适配器 | 升级后操作 | 验证命令 |
+|--------|-----------|---------|
+| **OpenClaw** | 需手动重新注册插件 | `openclaw plugins install --link ~/.openclaw/extensions/mingjing-probe/index.js` |
+| **Hermes** | **无需操作**（hooks 接口官方稳定） | `hermes plugins list && ls ~/.ming/hot/ \| head` |
+| **OpenCode** | 检查 stderr 是否有 schema 警告 | 启动探针后检查 `~/.ming/hot/` 是否有新文件 |
+| **LangChain** | 运行快速验证命令 | `python -c "import ming_probe_langchain; print('OK')"` |
+
+所有适配器升级后均可通过 `python -m mingjing health` 检查归档器状态。
 
 ![OpenClaw 对话截图 — 随时询问近期健康状况](updocs/image/openclawyanshi.png)
 

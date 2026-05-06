@@ -2,6 +2,7 @@
 # 需要 langchain-core >= 1.0 真实安装
 
 import sys
+import unittest
 import uuid
 from pathlib import Path
 
@@ -9,11 +10,15 @@ _src = Path(__file__).parent.parent / "src"
 if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 
-import unittest
+try:
+    import langchain_core
+except ImportError:
+    langchain_core = None
 
 _captured_events = []
 
 
+@unittest.skipIf(langchain_core is None, "需要 langchain-core")
 class TestMingCallbackHandler(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

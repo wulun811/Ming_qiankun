@@ -1,9 +1,14 @@
-# web_exporter.py —— v0.11.9m 只读数据生成器（前端对齐版）
+# web_exporter.py —— v0.11.10 只读数据生成器（前端对齐版）
 # 职责：读 SQLite + 扫描热轨 + 检查心跳 → 输出 data.json
 # 依赖：标准库 only
 
-import sqlite3, json, time, os, hashlib, subprocess
+import sqlite3, json, time, os, hashlib, subprocess, sys
 from pathlib import Path
+
+_src = str(Path(__file__).parent.parent.parent)
+if _src not in sys.path:
+    sys.path.insert(0, _src)
+from archiver_compress import resolve_payload
 
 
 def _get_excluded():
@@ -24,7 +29,7 @@ def _get_excluded():
     return systems
 
 
-KNOWN_PROBES = {"tusunsun", "langchain", "openclaw", "mingjing"}
+KNOWN_PROBES = {"tusunsun", "langchain", "openclaw", "mingjing", "opencode"}
 
 
 def _is_known(s):
@@ -441,26 +446,69 @@ def _collect_footprint():
 
     # 2. 已注册系统
     excluded = _get_excluded()
+    seen_pids = {os.getpid()}
     if DB.exists():
         try:
             conn = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
             conn.execute("PRAGMA busy_timeout=3000")
             rows = conn.execute(
-                "SELECT system, pid FROM system_pid WHERE pid > 0 ORDER BY system"
+                "SELECT system, pid, mode FROM system_pid WHERE pid > 0 ORDER BY system"
             ).fetchall()
             conn.close()
-            for system, pid in rows:
+            for system, pid, mode in rows:
+                if system == "mingjing":
+                    continue
                 status = _read_proc_status(pid)
-                if status and system != "mingjing":
+                if not status:
+                    continue
+                seen_pids.add(pid)
+                systems.append(
+                    {
+                        "system": system + " (probe)",
+                        "rss_mb": status.get("rss_mb", 0),
+                        "vsz_mb": status.get("vsz_mb", 0),
+                        "cpu_pct": round(_proc_cpu_pct(pid), 1),
+                        "fd_count": _proc_fd_count(pid),
+                        "uptime_min": _proc_uptime_min(pid),
+                        "excluded": system in excluded,
+                        "mode": mode,
+                    }
+                )
+                # Scan /proc for main process (higher RSS) matching system name
+                best_main = None
+                for entry in os.listdir("/proc"):
+                    if not entry.isdigit() or int(entry) in seen_pids:
+                        continue
+                    try:
+                        cmd = (
+                            Path(f"/proc/{entry}/cmdline")
+                            .read_bytes()
+                            .decode(errors="replace")
+                            .replace("\x00", " ")
+                        )
+                        if system.lower() in cmd.lower():
+                            st = _read_proc_status(int(entry))
+                            if st and st["rss_mb"] > 50:
+                                if (
+                                    not best_main
+                                    or st["rss_mb"] > best_main["status"]["rss_mb"]
+                                ):
+                                    best_main = {"pid": int(entry), "status": st}
+                    except (OSError, ValueError):
+                        pass
+                if best_main:
+                    seen_pids.add(best_main["pid"])
+                    s = best_main["status"]
                     systems.append(
                         {
                             "system": system,
-                            "rss_mb": status.get("rss_mb", 0),
-                            "vsz_mb": status.get("vsz_mb", 0),
-                            "cpu_pct": round(_proc_cpu_pct(pid), 1),
-                            "fd_count": _proc_fd_count(pid),
-                            "uptime_min": _proc_uptime_min(pid),
+                            "rss_mb": s["rss_mb"],
+                            "vsz_mb": s.get("vsz_mb", 0),
+                            "cpu_pct": round(_proc_cpu_pct(best_main["pid"]), 1),
+                            "fd_count": _proc_fd_count(best_main["pid"]),
+                            "uptime_min": _proc_uptime_min(best_main["pid"]),
                             "excluded": system in excluded,
+                            "mode": mode,
                         }
                     )
         except sqlite3.OperationalError:
@@ -609,9 +657,11 @@ def export():
     # === 诊断病历 ===
     diagnoses = []
     try:
+        since = time.time() - 86400
         diag_cols = "diagnosis_id, system, fault_id, diagnosis_name, confidence, severity, status, evidence_quality, created_at, evidence, inference_chain"
         rows = conn.execute(
-            f"SELECT {diag_cols} FROM {tbl} ORDER BY created_at DESC LIMIT 50"
+            f"SELECT {diag_cols} FROM {tbl} WHERE created_at > ? ORDER BY created_at DESC LIMIT 200",
+            (since,),
         ).fetchall()
         for r in rows:
             d = dict(r)
@@ -770,18 +820,19 @@ def export():
     recent_events = []
     has_integrity = _has_column(conn, "events", "integrity")
     has_ingest_channel = _has_column(conn, "events", "_ingest_channel")
-    cols = "id, system, event_type, mode, integrity_score, lamport, timestamp, payload"
+    cols = "e.id, e.system, e.event_type, e.mode, e.integrity_score, e.lamport, e.timestamp, e.payload, e.storage_tier, b.payload_blob"
     if has_integrity:
-        cols += ", integrity"
+        cols += ", e.integrity"
     if has_ingest_channel:
-        cols += ", _ingest_channel"
+        cols += ", e._ingest_channel"
     rows = _safe_query(
-        conn, f"SELECT {cols} FROM events ORDER BY timestamp DESC LIMIT 200"
+        conn,
+        f"SELECT {cols} FROM events e LEFT JOIN events_blob b ON e.id = b.event_id ORDER BY e.timestamp DESC LIMIT 200",
     )
     for r in rows:
         d = dict(r)
         try:
-            d["payload_obj"] = json.loads(d.get("payload", "{}"))
+            d["payload_obj"] = resolve_payload(d)
         except (json.JSONDecodeError, TypeError):
             d["payload_obj"] = {}
         if not d.get("integrity"):
@@ -805,74 +856,82 @@ def export():
     for s in systems:
         rows = _safe_query(
             conn,
-            """
-            SELECT
-                COALESCE(SUM(json_extract(payload, '$.layer_llm.input_tokens')), 0) as input_tokens,
-                COALESCE(SUM(json_extract(payload, '$.layer_llm.output_tokens')), 0) as output_tokens,
-                COUNT(*) as call_count,
-                COALESCE(AVG(json_extract(payload, '$.layer_llm.latency_ms')), 0) as avg_latency,
-                COALESCE(MAX(json_extract(payload, '$.layer_llm.latency_ms')), 0) as max_latency
-            FROM events
-            WHERE system = ? AND event_type = 'llm_invoke'
-        """,
+            "SELECT e.storage_tier, e.payload, b.payload_blob "
+            "FROM events e LEFT JOIN events_blob b ON e.id = b.event_id "
+            "WHERE e.system = ? AND e.event_type = 'llm_invoke'",
             (s,),
         )
-        if rows and rows[0]:
-            r = dict(rows[0])
-            r["system"] = s
-            r["input_tokens"] = int(r.get("input_tokens") or 0)
-            r["output_tokens"] = int(r.get("output_tokens") or 0)
-            r["total_tokens"] = r["input_tokens"] + r["output_tokens"]
-            r["call_count"] = int(r.get("call_count") or 0)
-            r["avg_latency"] = float(r.get("avg_latency") or 0)
-            r["max_latency"] = float(r.get("max_latency") or 0)
-            token_by_system.append(r)
-        else:
-            token_by_system.append(
-                {
-                    "system": s,
-                    "input_tokens": 0,
-                    "output_tokens": 0,
-                    "total_tokens": 0,
-                    "call_count": 0,
-                    "avg_latency": 0,
-                    "max_latency": 0,
-                }
-            )
+        inp = out = cnt = 0
+        lats = []
+        for r in rows:
+            cnt += 1
+            p = resolve_payload(dict(r))
+            if not isinstance(p, dict):
+                continue
+            inp += p.get("layer_llm", {}).get("input_tokens", 0) or 0
+            out += p.get("layer_llm", {}).get("output_tokens", 0) or 0
+            lat = p.get("layer_llm", {}).get("latency_ms", 0) or 0
+            if lat:
+                lats.append(lat)
+        token_by_system.append(
+            {
+                "system": s,
+                "input_tokens": inp,
+                "output_tokens": out,
+                "total_tokens": inp + out,
+                "call_count": cnt,
+                "avg_latency": sum(lats) / len(lats) if lats else 0,
+                "max_latency": max(lats) if lats else 0,
+            }
+        )
     token_by_system.sort(key=lambda x: x.get("total_tokens", 0), reverse=True)
 
     # === Token 统计（按模型）===
-    token_by_model = _safe_query(
+    model_rows = _safe_query(
         conn,
-        """
-        SELECT
-            json_extract(payload, '$.layer_llm.model') as model,
-            SUM(COALESCE(json_extract(payload, '$.layer_llm.input_tokens'), 0)) as input_tokens,
-            SUM(COALESCE(json_extract(payload, '$.layer_llm.output_tokens'), 0)) as output_tokens,
-            COUNT(*) as call_count
-        FROM events
-        WHERE event_type = 'llm_invoke'
-          AND json_extract(payload, '$.layer_llm.model') IS NOT NULL
-        GROUP BY model
-        ORDER BY (input_tokens + output_tokens) DESC
-    """,
+        "SELECT e.storage_tier, e.payload, b.payload_blob "
+        "FROM events e LEFT JOIN events_blob b ON e.id = b.event_id "
+        "WHERE e.event_type = 'llm_invoke'",
     )
-    token_by_model = [dict(r) for r in token_by_model]
-    for m in token_by_model:
-        m["total_tokens"] = (m.get("input_tokens") or 0) + (m.get("output_tokens") or 0)
+    model_agg = {}
+    for r in model_rows:
+        p = resolve_payload(dict(r))
+        if not isinstance(p, dict):
+            continue
+        model = (p.get("layer_llm") or {}).get("model")
+        if not model:
+            continue
+        inp = (p.get("layer_llm") or {}).get("input_tokens", 0) or 0
+        out = (p.get("layer_llm") or {}).get("output_tokens", 0) or 0
+        if model not in model_agg:
+            model_agg[model] = {"input_tokens": 0, "output_tokens": 0, "call_count": 0}
+        model_agg[model]["input_tokens"] += inp
+        model_agg[model]["output_tokens"] += out
+        model_agg[model]["call_count"] += 1
+    token_by_model = sorted(
+        [
+            {"model": m, **v, "total_tokens": v["input_tokens"] + v["output_tokens"]}
+            for m, v in model_agg.items()
+        ],
+        key=lambda x: x["total_tokens"],
+        reverse=True,
+    )
 
     # === 延迟分布（所有 LLM 调用）===
     latency_rows = _safe_query(
         conn,
-        """
-        SELECT json_extract(payload, '$.layer_llm.latency_ms') as latency_ms
-        FROM events
-        WHERE event_type = 'llm_invoke'
-          AND json_extract(payload, '$.layer_llm.latency_ms') IS NOT NULL
-        ORDER BY latency_ms
-    """,
+        "SELECT e.storage_tier, e.payload, b.payload_blob "
+        "FROM events e LEFT JOIN events_blob b ON e.id = b.event_id "
+        "WHERE e.event_type = 'llm_invoke'",
     )
-    latencies = [r[0] for r in latency_rows if r[0] is not None]
+    latencies = []
+    for r in latency_rows:
+        p = resolve_payload(dict(r))
+        if not isinstance(p, dict):
+            continue
+        lat = (p.get("layer_llm") or {}).get("latency_ms")
+        if lat is not None:
+            latencies.append(lat)
     latency_stats = {}
     if latencies:
         latencies.sort()
@@ -1725,64 +1784,62 @@ def query_events(
     except sqlite3.OperationalError:
         return []
 
+    # Build basic WHERE (skip model/keyword — handled in Python for compressed rows)
     conditions = []
     params = []
-
     if system:
-        conditions.append("system = ?")
+        conditions.append("e.system = ?")
         params.append(system)
     if event_type:
-        conditions.append("event_type = ?")
+        conditions.append("e.event_type = ?")
         params.append(event_type)
     if since is not None:
-        conditions.append("timestamp >= ?")
+        conditions.append("e.timestamp >= ?")
         params.append(since)
     if until is not None:
-        conditions.append("timestamp <= ?")
+        conditions.append("e.timestamp <= ?")
         params.append(until)
-    if models:
-        placeholders = ",".join("?" for _ in models)
-        conditions.append(
-            f"json_extract(payload, '$.layer_llm.model') IN ({placeholders})"
-        )
-        params.extend(models)
-    if keyword:
-        conditions.append("payload LIKE ?")
-        params.append(f"%{keyword}%")
-
-    where = ""
-    if conditions:
-        where = "WHERE " + " AND ".join(conditions)
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
     has_ingest_channel = _has_column(conn, "events", "_ingest_channel")
     has_integrity = _has_column(conn, "events", "integrity")
-    cols = "id, system, event_type, mode, integrity_score, lamport, timestamp, payload"
+    cols = "e.id, e.system, e.event_type, e.mode, e.integrity_score, e.lamport, e.timestamp, e.payload, e.storage_tier, b.payload_blob"
     if has_integrity:
-        cols += ", integrity"
+        cols += ", e.integrity"
     if has_ingest_channel:
-        cols += ", _ingest_channel"
+        cols += ", e._ingest_channel"
 
+    # Fetch with LEFT JOIN — filter model/keyword in Python to handle compressed rows
     sql = f"""
         SELECT {cols}
-        FROM events {where}
-        ORDER BY timestamp DESC
-        LIMIT ? OFFSET ?
+        FROM events e LEFT JOIN events_blob b ON e.id = b.event_id
+        {where}
+        ORDER BY e.timestamp DESC
     """
-    params.extend([limit, offset])
-
     try:
-        rows = conn.execute(sql, params).fetchall()
+        all_rows = conn.execute(sql, params).fetchall()
     except sqlite3.OperationalError:
         conn.close()
         return []
 
-    events = []
-    for r in rows:
+    # Filter by model and keyword in Python
+    model_set = set(models) if models else None
+    filtered = []
+    for r in all_rows:
         d = dict(r)
         try:
-            d["payload_obj"] = json.loads(d.get("payload", "{}"))
-        except (json.JSONDecodeError, TypeError):
-            d["payload_obj"] = {}
+            p = resolve_payload(d)
+        except Exception:
+            p = None
+        d["payload_obj"] = p if isinstance(p, dict) else {}
+        if model_set:
+            m = d["payload_obj"].get("layer_llm", {}).get("model")
+            if m not in model_set:
+                continue
+        if keyword:
+            text = json.dumps(d["payload_obj"], ensure_ascii=False)
+            if keyword not in text:
+                continue
         if not d.get("integrity"):
             score = d.get("integrity_score", 0) or 0
             d["integrity"] = (
@@ -1793,11 +1850,13 @@ def query_events(
         if not d.get("_ingest_channel"):
             d["_ingest_channel"] = "hooks"
         d["model"] = (
-            d.get("payload_obj", {}).get("layer_llm", {}).get("model")
-            if isinstance(d.get("payload_obj"), dict)
+            d["payload_obj"].get("layer_llm", {}).get("model")
+            if isinstance(d["payload_obj"], dict)
             else None
         )
-        events.append(d)
+        filtered.append(d)
+
+    events = filtered[offset : offset + limit]
 
     conn.close()
     return events
@@ -1815,15 +1874,19 @@ def get_distinct_models() -> list[str]:
 
     try:
         rows = conn.execute(
-            """
-            SELECT DISTINCT json_extract(payload, '$.layer_llm.model') as model
-            FROM events
-            WHERE event_type = 'llm_invoke'
-              AND json_extract(payload, '$.layer_llm.model') IS NOT NULL
-            ORDER BY model
-            """
+            "SELECT e.storage_tier, e.payload, b.payload_blob "
+            "FROM events e LEFT JOIN events_blob b ON e.id = b.event_id "
+            "WHERE e.event_type = 'llm_invoke'"
         ).fetchall()
-        return [r[0] for r in rows if r[0]]
+        models = set()
+        for r in rows:
+            p = resolve_payload(dict(r))
+            if not isinstance(p, dict):
+                continue
+            m = (p.get("layer_llm") or {}).get("model")
+            if m:
+                models.add(m)
+        return sorted(models)
     except sqlite3.OperationalError:
         return []
     finally:

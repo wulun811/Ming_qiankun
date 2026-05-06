@@ -288,6 +288,7 @@ python3 src/cli.py <command>
 | `ming report --days 7` | 近一周综合报告（自动感知忽略/归档/复位状态） |
 | `ming report --json` | JSON 格式（含 instances 数组，每实例健康/疾病/P0-P2） |
 | `ming status` | 快速看系统是否在线 + 实例健康一览 |
+| `ming upgrade` | **一键升级乾坤镜到最新版并自动重启** |
 | `ming instance-list` | 紧凑表格：实例、探针、健康、P0/P1/P2、复位/归档标记 |
 
 #### 诊断操作（dx 子命令）
@@ -434,6 +435,24 @@ sudo systemctl start ming-archiver ming-web
 # 启用开机自启
 sudo systemctl enable ming-archiver ming-web
 ```
+
+## 升级乾坤镜
+
+```bash
+# 一键升级到最新版（自动 pip install --upgrade + 重启）
+python3 src/ming.py upgrade
+
+# 或通过 CLI（pip 安装后 ming 在 PATH 中）
+ming upgrade
+```
+
+`ming upgrade` 会自动：
+1. 检测当前版本
+2. 执行 `pip install --upgrade mingjing`（PyPI 安装时）或 `git pull`（源码安装时）
+3. 检测当前运行方式（systemd 服务或手动守护进程）
+4. 升级完成后自动重启归档器和 Web 面板
+
+> **注意**：`ming upgrade` 只升级乾坤镜后端代码，不升级 OpenClaw 探针插件。探针插件升级请跟随 OpenClaw 版本。
 
 ## 故障排查
 

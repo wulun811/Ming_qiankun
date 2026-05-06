@@ -1,14 +1,11 @@
 # archiver.py —— 0.11.9m 单线程归档器 + 病历校验 + 自动清理 + 分诊触发 + 异常恢复
 # 职责：热轨扫描 → 元数据分离 → integrity_score → 四表写入 → TTL 清理 → 自动分诊
 # 拆分：TTL→archiver_ttl / 备份→archiver_backup / 确认→archiver_confirm / Schema→archiver_schema / 分诊→archiver_triage / 评分→archiver_score
-import os, json, time, sqlite3, hashlib, shutil, threading
+import os, json, time, sqlite3, hashlib, shutil, threading, gc, ctypes
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from archiver_ttl import purge_expired
-from archiver_backup import run_backup
-from archiver_confirm import apply_confirmations
 from archiver_schema import init_schema, init_diagnoses_table
-from archiver_triage import trigger_triage, run_diagnosis_async
 from archiver_score import score_event
 from archiver_util import (
     write_heartbeat,
@@ -17,6 +14,33 @@ from archiver_util import (
     update_expectation as _update_exp,
 )
 from archiver_exclude import is_system_excluded
+from archiver_compress import (
+    compress_payload,
+    verify_compress_integrity,
+    MIN_COMPRESS_BYTES,
+)
+
+try:
+    from archiver_ttl import purge_expired
+except ImportError:
+    purge_expired = None
+try:
+    from archiver_backup import run_backup
+except ImportError:
+    run_backup = None
+try:
+    from archiver_confirm import apply_confirmations
+except ImportError:
+    apply_confirmations = None
+try:
+    from archiver_triage import trigger_triage, run_diagnosis_async
+except ImportError:
+    trigger_triage = None
+    run_diagnosis_async = None
+try:
+    from archiver_summary import summarize_month
+except ImportError:
+    summarize_month = None
 
 
 class Archiver:
@@ -49,6 +73,12 @@ class Archiver:
         self._last_vacuum = 0
         self._triage_running = threading.Event()
         self._last_backup = 0
+        self._startup_time = time.time()
+        self._trim_counter = 0
+        self.warm_days = 14
+        self.min_compress_bytes = MIN_COMPRESS_BYTES
+        self._last_compress = 0
+        self._last_summary_check = 0
         self._scan_hot_dir()
 
     def _open_db(self, read_only=False, timeout=5):
@@ -56,6 +86,7 @@ class Archiver:
         conn.execute(f"PRAGMA busy_timeout={timeout * 1000}")
         conn.execute("PRAGMA foreign_keys = ON")
         conn.execute("PRAGMA cache_size = -2000")
+        conn.execute("PRAGMA mmap_size = 268435456")
         if read_only:
             conn.execute("PRAGMA query_only=ON")
         return conn
@@ -182,10 +213,13 @@ class Archiver:
                                     or metadata[system]["pid"] == 0
                                 ):
                                     metadata[system]["touch_pid"] = ev_pid
+                                if "mode" not in metadata[system]:
+                                    metadata[system]["mode"] = ev.get("mode", "white")
                             else:
                                 metadata[system] = {
                                     "last_touch": ts,
                                     "touch_pid": ev_pid,
+                                    "mode": ev.get("mode", "white"),
                                 }
                     else:
                         score = self._integrity_score(ev)
@@ -207,11 +241,18 @@ class Archiver:
                 prev = last_hash[0] if last_hash else "0" * 64
                 batch = []
                 for ev in all_events:
+                    payload_dict = ev.get("payload", {})
+                    payload_text = json.dumps(
+                        payload_dict, ensure_ascii=False, sort_keys=True
+                    )
+                    payload_hash = hashlib.sha256(
+                        payload_text.encode("utf-8")
+                    ).hexdigest()
                     content = json.dumps(
                         {
                             "system": ev["system"],
                             "event_type": ev["event_type"],
-                            "payload": ev.get("payload", {}),
+                            "payload_hash": payload_hash,
                             "timestamp": ev.get("timestamp", 0),
                         },
                         sort_keys=True,
@@ -222,7 +263,7 @@ class Archiver:
                             ev["system"],
                             ev.get("mode", "white"),
                             ev["event_type"],
-                            json.dumps(ev.get("payload", {})),
+                            json.dumps(payload_dict),
                             ev.get("content_hash", ""),
                             prev,
                             curr,
@@ -233,11 +274,12 @@ class Archiver:
                             0,
                             ev.get("monotonic_ms"),
                             ev.get("lamport"),
+                            payload_hash,
                         )
                     )
                     prev = curr
                 cursor.executemany(
-                    "INSERT OR IGNORE INTO events (system, mode, event_type, payload, content_hash, prev_hash, curr_hash, timestamp, integrity, chain_status, integrity_score, ttl_protected, monotonic_ms, lamport) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT OR IGNORE INTO events (system, mode, event_type, payload, content_hash, prev_hash, curr_hash, timestamp, integrity, chain_status, integrity_score, ttl_protected, monotonic_ms, lamport, payload_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     batch,
                 )
             for system, meta in metadata.items():
@@ -251,7 +293,7 @@ class Archiver:
                     else meta.get("last_touch", 0)
                 )
                 last_seen = meta.get("last_touch", registered_at)
-                mode = reg.get("mode", "white") if reg else "white"
+                mode = reg.get("mode", "white") if reg else meta.get("mode", "white")
                 cursor.execute(
                     "INSERT OR REPLACE INTO system_pid (system, pid, registered_at, last_seen, mode) VALUES (?, ?, ?, ?, ?)",
                     (system, pid, registered_at, last_seen, mode),
@@ -355,10 +397,14 @@ class Archiver:
                 self._log_error(e)
         self._heartbeat()
         self._auto_backup()
-        self._purge_expired_events()
-        self._apply_confirmations()
+        if purge_expired:
+            self._purge_expired_events()
+        if apply_confirmations:
+            self._apply_confirmations()
         self._maybe_run_triage()
         self._maybe_cleanup_cold()
+        self._compress_old_events()
+        self._summarize_old_events()
         if all_events:
             self._run_diagnosis()
         return len(all_events)
@@ -386,18 +432,26 @@ class Archiver:
             conn.close()
 
     def _maybe_run_triage(self):
-        trigger_triage(
-            self._triage_running,
-            self.TRIAGE_SNAPSHOT,
-            self.TRIAGE_INTERVAL,
-            self._log_error,
-        )
+        if trigger_triage:
+            trigger_triage(
+                self._triage_running,
+                self.TRIAGE_SNAPSHOT,
+                self.TRIAGE_INTERVAL,
+                self._log_error,
+            )
 
     def _run_diagnosis(self):
-        run_diagnosis_async(self._log_error)
+        if run_diagnosis_async:
+            run_diagnosis_async(self._log_error)
 
     def _auto_backup(self):
+        if not run_backup or time.time() - self._startup_time < 3600:
+            return
+        old_last = self._last_backup
         self._last_backup = run_backup(str(self.DB), self._last_backup, self._log_error)
+        if self._last_backup != old_last:
+            gc.collect()
+            ctypes.CDLL("libc.so.6").malloc_trim(0)
 
     def _purge_expired_events(self):
         try:
@@ -433,6 +487,143 @@ class Archiver:
                 f"cold_cleanup: removed {removed} files older than {self.COLD_TTL_DAYS}d"
             )
 
+    def _summarize_old_events(self):
+        if not summarize_month:
+            return
+        now = time.time()
+        if now - self._last_summary_check < 86400:
+            return
+        self._last_summary_check = now
+        dt = datetime.now(timezone.utc)
+        if dt.day != 1:
+            return
+        prev = dt.replace(day=1) - timedelta(days=1)
+        year_month = prev.strftime("%Y_%m")
+        try:
+            conn = self._open_db()
+            try:
+                result = summarize_month(conn, year_month)
+                if result and "error" in result:
+                    self._log_error(f"monthly summary error: {result['error']}")
+                elif result and "skipped" not in result:
+                    self._log_error(
+                        f"monthly summary: {year_month} aggregated "
+                        f"{result['total_events']} events across {len(result['systems'])} systems"
+                    )
+            finally:
+                conn.close()
+        except Exception as e:
+            self._log_error(f"monthly summary error: {e}")
+
+    def _check_disk_space(self):
+        free_mb = shutil.disk_usage(str(self.DB.parent)).free / (1024 * 1024)
+        db_size_mb = os.path.getsize(self.DB) / (1024 * 1024)
+        if free_mb < db_size_mb * 1.5:
+            self._log_error(
+                f"Insufficient disk space: free={free_mb:.0f}MB, db={db_size_mb:.0f}MB, need 1.5x"
+            )
+            return False
+        return True
+
+    def _commit_batch(self, conn, batch):
+        if not batch:
+            return
+        conn.execute("BEGIN IMMEDIATE")
+        for blob, ev_id in batch:
+            conn.execute(
+                "INSERT INTO events_blob (event_id, payload_blob) VALUES (?, ?) "
+                "ON CONFLICT(event_id) DO UPDATE SET payload_blob = excluded.payload_blob",
+                (ev_id, blob),
+            )
+            conn.execute(
+                "UPDATE events SET payload = NULL, storage_tier = 1, compress_attempts = 0 WHERE id = ?",
+                (ev_id,),
+            )
+        conn.execute("COMMIT")
+
+    def _compress_old_events(self):
+        now = time.time()
+        if now - self._last_compress < 3600:
+            return
+        self._last_compress = now
+        if not self._check_disk_space():
+            return
+        try:
+            conn = self._open_db()
+            try:
+                cutoff = now - self.warm_days * 86400
+                rows = conn.execute(
+                    """
+                    SELECT e.id, e.payload, e.payload_hash
+                    FROM events e
+                    WHERE e.storage_tier = 0 AND e.timestamp < ?
+                      AND e.ttl_protected = 0
+                      AND e.payload IS NOT NULL
+                      AND LENGTH(e.payload) >= ?
+                    """,
+                    (cutoff, self.min_compress_bytes),
+                ).fetchall()
+                if not rows:
+                    return
+                count_before = len(rows)
+                total_before = sum(len(r[1]) for r in rows if r[1])
+                batch = []
+                success = 0
+                fail = 0
+                start_ts = time.time()
+                for ev_id, payload_text, payload_hash in rows:
+                    try:
+                        payload_dict = json.loads(payload_text)
+                        blob = compress_payload(payload_dict)
+                        if not verify_compress_integrity(payload_dict, blob):
+                            raise ValueError("Compression corrupted payload")
+                        batch.append((blob, ev_id))
+                        success += 1
+                    except Exception:
+                        attempts = conn.execute(
+                            "UPDATE events SET compress_attempts = compress_attempts + 1 WHERE id = ? RETURNING compress_attempts",
+                            (ev_id,),
+                        ).fetchone()[0]
+                        if attempts >= 3:
+                            conn.execute(
+                                "UPDATE events SET storage_tier = 2 WHERE id = ?",
+                                (ev_id,),
+                            )
+                            self._log_error(
+                                f"Compression failed after 3 attempts for event {ev_id}, marked as failed"
+                            )
+                        fail += 1
+                    if len(batch) >= 500:
+                        self._commit_batch(conn, batch)
+                        batch = []
+                if batch:
+                    self._commit_batch(conn, batch)
+                elapsed = (time.time() - start_ts) * 1000
+                total_after = (
+                    sum(
+                        conn.execute(
+                            "SELECT LENGTH(payload_blob) FROM events_blob WHERE event_id = ?",
+                            (r[0],),
+                        ).fetchone()[0]
+                        for r in rows[:success]
+                        if conn.execute(
+                            "SELECT storage_tier FROM events WHERE id = ?", (r[0],)
+                        ).fetchone()[0]
+                        == 1
+                    )
+                    if success > 0
+                    else 0
+                )
+                self._log_error(
+                    f"compress: scanned={count_before} compressed={success} failed={fail} "
+                    f"before={total_before}B after={total_after}B "
+                    f"ratio={total_before / max(total_after, 1):.1f}x elapsed={elapsed:.0f}ms"
+                )
+            finally:
+                conn.close()
+        except Exception as e:
+            self._log_error(f"compress error: {e}")
+
     def vacuum(self):
         result = _vacuum(str(self.DB), self._last_vacuum, self.VACUUM_INTERVAL)
         if result is None:
@@ -444,6 +635,8 @@ class Archiver:
         self._alive = True
         self._consecutive_errors = 0
         self._max_consecutive_errors = 100
+
+        _libc = ctypes.CDLL("libc.so.6")
 
         def loop():
             while self._alive:
@@ -459,6 +652,11 @@ class Archiver:
                     backoff = min(self._consecutive_errors * self.FLUSH_INTERVAL, 30)
                     time.sleep(backoff)
                     continue
+                self._trim_counter += 1
+                if self._trim_counter >= 300:
+                    self._trim_counter = 0
+                    gc.collect()
+                    _libc.malloc_trim(0)
                 time.sleep(self.FLUSH_INTERVAL)
 
         self._daemon_thread = threading.Thread(target=loop, daemon=True)

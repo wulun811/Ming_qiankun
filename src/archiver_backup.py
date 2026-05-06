@@ -5,7 +5,7 @@ import sqlite3
 import time
 from pathlib import Path
 
-BACKUP_INTERVAL = 3600
+BACKUP_INTERVAL = 86400
 
 
 def run_backup(db_path, last_backup, log_error_fn=None):
@@ -29,7 +29,7 @@ def run_backup(db_path, last_backup, log_error_fn=None):
         finally:
             src.close()
         backups = sorted(db.parent.glob("ming_*.db.bak"))
-        for old in backups[:-5]:
+        for old in backups[:-3]:
             old.unlink()
     except Exception as e:
         if log_error_fn:

@@ -4,6 +4,7 @@
 
 import json, time
 from pathlib import Path
+from archiver_compress import resolve_payload
 
 
 class QueryBridge:
@@ -19,30 +20,36 @@ class QueryBridge:
         self, system=None, event_type=None, limit=100, since=None, exclude_type=None
     ):
         """查询事件，优先 SQLite，无结果时查热轨"""
-        sql = "SELECT * FROM events WHERE 1=1"
+        sql = "SELECT e.*, b.payload_blob FROM events e LEFT JOIN events_blob b ON e.id = b.event_id WHERE 1=1"
         params = []
         if system:
-            sql += " AND system = ?"
+            sql += " AND e.system = ?"
             params.append(system)
         if event_type:
-            sql += " AND event_type = ?"
+            sql += " AND e.event_type = ?"
             params.append(event_type)
-        # 默认排除 __meta_health__ 事件
         exclude = exclude_type or "__meta_health__"
         if exclude:
-            sql += " AND event_type != ?"
+            sql += " AND e.event_type != ?"
             params.append(exclude)
         if since:
-            sql += " AND timestamp >= ?"
+            sql += " AND e.timestamp >= ?"
             params.append(since)
-        sql += " ORDER BY id DESC LIMIT ?"
+        sql += " ORDER BY e.id DESC LIMIT ?"
         params.append(limit)
 
         rows = self._conn.execute(sql, params).fetchall()
         cols = [
-            d[0] for d in self._conn.execute("SELECT * FROM events LIMIT 0").description
+            d[0]
+            for d in self._conn.execute(
+                "SELECT e.*, b.payload_blob FROM events e LEFT JOIN events_blob b ON e.id = b.event_id LIMIT 0"
+            ).description
         ]
         results = [dict(zip(cols, r)) for r in rows]
+        for r in results:
+            r["payload"] = resolve_payload(r)
+        for r in results:
+            r.pop("payload_blob", None)
 
         # 如果结果不足且 since 在归档延迟窗口内（< 2 秒）
         if len(results) < limit and since and (time.time() - since) < 2:
@@ -79,123 +86,200 @@ class QueryBridge:
 
     def query_token_breakdown(self, system=None, since=None, group_by="model"):
         """Token 消耗分解（按 model/hour/agent 分组）"""
-        group_col, order_col = {
-            "model": ("json_extract(payload, '$.layer_llm.model')", "tokens"),
-            "hour": ("CAST(timestamp / 3600 AS INTEGER)", "tokens"),
-            "agent": ("system", "tokens"),
-        }.get(group_by, ("json_extract(payload, '$.layer_llm.model')", "tokens"))
-        since_clause = "AND timestamp > ?" if since else ""
-        sql = f"""
-            SELECT {group_col} AS grp,
-                   SUM(json_extract(payload, '$.layer_llm.input_tokens') +
-                       json_extract(payload, '$.layer_llm.output_tokens')) AS tokens,
-                   SUM(json_extract(payload, '$.layer_llm.input_tokens')) AS input_tokens,
-                   SUM(json_extract(payload, '$.layer_llm.output_tokens')) AS output_tokens,
-                   COUNT(*) AS calls
-            FROM events
-            WHERE event_type='llm_invoke'
-              AND (system = ? OR ? IS NULL)
-              {since_clause}
-            GROUP BY grp
-            ORDER BY {order_col} DESC
-        """
         params = [system, system]
+        since_clause = "AND e.timestamp > ?" if since else ""
         if since:
             params.insert(2, since)
+        sql = f"""
+            SELECT e.storage_tier, e.payload, b.payload_blob,
+                   e.timestamp, e.system
+            FROM events e LEFT JOIN events_blob b ON e.id = b.event_id
+            WHERE e.event_type='llm_invoke'
+              AND (e.system = ? OR ? IS NULL)
+              {since_clause}
+        """
         rows = self._conn.execute(sql, params).fetchall()
-        cols = ["group", "tokens", "input_tokens", "output_tokens", "calls"]
-        return [dict(zip(cols, r)) for r in rows]
+        agg = {}
+        for r in rows:
+            d = dict(
+                zip(
+                    ["storage_tier", "payload", "payload_blob", "timestamp", "system"],
+                    r,
+                )
+            )
+            p = resolve_payload(d)
+            if not isinstance(p, dict):
+                continue
+            if group_by == "model":
+                g = (p.get("layer_llm") or {}).get("model") or "unknown"
+            elif group_by == "hour":
+                g = int(d["timestamp"] / 3600) if d["timestamp"] else 0
+            else:
+                g = d["system"]
+            inp = (p.get("layer_llm") or {}).get("input_tokens", 0) or 0
+            out = (p.get("layer_llm") or {}).get("output_tokens", 0) or 0
+            if g not in agg:
+                agg[g] = {
+                    "tokens": 0,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "calls": 0,
+                }
+            agg[g]["tokens"] += inp + out
+            agg[g]["input_tokens"] += inp
+            agg[g]["output_tokens"] += out
+            agg[g]["calls"] += 1
+        result = [{"group": g, **v} for g, v in agg.items()]
+        result.sort(key=lambda x: x["tokens"], reverse=True)
+        return result
 
     def query_tool_dangerous(self, system=None, since=None):
         """危险工具调用审计"""
-        since_clause = "AND timestamp > ?" if since else ""
+        since_clause = "AND e.timestamp > ?" if since else ""
         sql = f"""
-            SELECT system,
-                   json_extract(payload, '$.layer_tool.tool_name') AS tool,
-                   json_extract(payload, '$.layer_tool.tool_args') AS args,
-                   json_extract(payload, '$.layer_tool.tool_result') AS result,
-                   json_extract(payload, '$.layer_tool.tool_status') AS status,
-                   json_extract(payload, '$.layer_tool.execution_ms') AS exec_ms,
-                   timestamp
-            FROM events
-            WHERE event_type='tool_call'
-              AND json_extract(payload, '$.layer_tool.tool_name') IN ('rm','unlink','exec','sudo','rm_rf','git_force_push','db_drop','chmod_777','eval')
-              AND (system = ? OR ? IS NULL)
+            SELECT e.system, e.storage_tier, e.payload, b.payload_blob, e.timestamp
+            FROM events e LEFT JOIN events_blob b ON e.id = b.event_id
+            WHERE e.event_type='tool_call'
+              AND (e.system = ? OR ? IS NULL)
               {since_clause}
-            ORDER BY timestamp DESC
+            ORDER BY e.timestamp DESC
         """
         params = [system, system]
         if since:
             params.insert(2, since)
         rows = self._conn.execute(sql, params).fetchall()
-        cols = ["system", "tool", "args", "result", "status", "exec_ms", "timestamp"]
-        return [dict(zip(cols, r)) for r in rows]
+        cols = ["system", "storage_tier", "payload", "payload_blob", "timestamp"]
+        DANGEROUS_TOOLS = {
+            "rm",
+            "unlink",
+            "exec",
+            "sudo",
+            "rm_rf",
+            "git_force_push",
+            "db_drop",
+            "chmod_777",
+            "eval",
+        }
+        result = []
+        for r in rows:
+            d = dict(zip(cols, r))
+            p = resolve_payload(d)
+            if not isinstance(p, dict):
+                continue
+            tool = (p.get("layer_tool") or {}).get("tool_name")
+            if tool not in DANGEROUS_TOOLS:
+                continue
+            result.append(
+                {
+                    "system": d["system"],
+                    "tool": tool,
+                    "args": (p.get("layer_tool") or {}).get("tool_args"),
+                    "result": (p.get("layer_tool") or {}).get("tool_result"),
+                    "status": (p.get("layer_tool") or {}).get("tool_status"),
+                    "exec_ms": (p.get("layer_tool") or {}).get("execution_ms"),
+                    "timestamp": d["timestamp"],
+                }
+            )
+        return result
 
     def query_step_sequence(self, system=None, session_id=None, since=None, limit=100):
         """Step 序列回放"""
-        since_clause = "AND timestamp > ?" if since else ""
-        session_clause = (
-            "AND json_extract(payload, '$.layer_agent.session_id') = ?"
-            if session_id
-            else ""
-        )
-        sql = f"""
-            SELECT system,
-                   json_extract(payload, '$.layer_agent.step_id') AS step_id,
-                   json_extract(payload, '$.layer_agent.session_id') AS session_id,
-                   timestamp,
-                   event_type
-            FROM events
-            WHERE event_type IN ('agent_step', 'tool_call', 'llm_invoke')
-              AND (system = ? OR ? IS NULL)
-              {session_clause}
-              {since_clause}
-            ORDER BY timestamp ASC
-            LIMIT ?
+        sql = """
+            SELECT e.system, e.storage_tier, e.payload, b.payload_blob,
+                   e.timestamp, e.event_type
+            FROM events e LEFT JOIN events_blob b ON e.id = b.event_id
+            WHERE e.event_type IN ('agent_step', 'tool_call', 'llm_invoke')
+              AND (e.system = ? OR ? IS NULL)
         """
         params = [system, system]
         if session_id:
-            params.insert(2, session_id)
+            sql += " AND 1=1"  # placeholder — filtered in Python
         if since:
+            sql += " AND e.timestamp > ?"
             params.append(since)
+        sql += " ORDER BY e.timestamp ASC LIMIT ?"
         params.append(limit)
         rows = self._conn.execute(sql, params).fetchall()
-        cols = ["system", "step_id", "session_id", "timestamp", "event_type"]
-        return [dict(zip(cols, r)) for r in rows]
+        cols = [
+            "system",
+            "storage_tier",
+            "payload",
+            "payload_blob",
+            "timestamp",
+            "event_type",
+        ]
+        result = []
+        for r in rows:
+            d = dict(zip(cols, r))
+            p = resolve_payload(d)
+            if not isinstance(p, dict):
+                continue
+            sid = (p.get("layer_agent") or {}).get("step_id")
+            sess = (p.get("layer_agent") or {}).get("session_id")
+            if session_id and sess != session_id:
+                continue
+            result.append(
+                {
+                    "system": d["system"],
+                    "step_id": sid,
+                    "session_id": sess,
+                    "timestamp": d["timestamp"],
+                    "event_type": d["event_type"],
+                }
+            )
+        return result[:limit]
 
     def query_step_loop(self, system=None, window=600):
         """Step 循环检测"""
-        sql = """
-            SELECT system,
-                   COUNT(DISTINCT json_extract(payload, '$.layer_agent.step_id')) * 1.0 / NULLIF(COUNT(*), 0) AS uniqueness,
-                   COUNT(*) AS total_steps,
-                   COUNT(DISTINCT json_extract(payload, '$.layer_agent.step_id')) AS unique_steps
-            FROM events
-            WHERE event_type='agent_step'
-              AND timestamp > ?
-              AND (system = ? OR ? IS NULL)
-            GROUP BY system
-            HAVING uniqueness < 0.5
-            ORDER BY uniqueness ASC
-        """
         since = time.time() - window
+        sql = """
+            SELECT e.system, e.storage_tier, e.payload, b.payload_blob
+            FROM events e LEFT JOIN events_blob b ON e.id = b.event_id
+            WHERE e.event_type='agent_step'
+              AND e.timestamp > ?
+              AND (e.system = ? OR ? IS NULL)
+        """
         rows = self._conn.execute(sql, (since, system, system)).fetchall()
-        cols = ["system", "uniqueness", "total_steps", "unique_steps"]
-        return [dict(zip(cols, r)) for r in rows]
+        cols = ["system", "storage_tier", "payload", "payload_blob"]
+        step_counts = {}
+        for r in rows:
+            d = dict(zip(cols, r))
+            p = resolve_payload(d)
+            if not isinstance(p, dict):
+                continue
+            sid = (p.get("layer_agent") or {}).get("step_id")
+            sys_name = d["system"]
+            if sys_name not in step_counts:
+                step_counts[sys_name] = {"steps": set(), "total": 0}
+            step_counts[sys_name]["steps"].add(sid)
+            step_counts[sys_name]["total"] += 1
+        result = []
+        for sys_name, data in step_counts.items():
+            unique = len(data["steps"])
+            total = data["total"]
+            uniqueness = (unique * 1.0 / total) if total > 0 else 1.0
+            if uniqueness < 0.5:
+                result.append(
+                    {
+                        "system": sys_name,
+                        "uniqueness": uniqueness,
+                        "total_steps": total,
+                        "unique_steps": unique,
+                    }
+                )
+        result.sort(key=lambda x: x["uniqueness"])
+        return result
 
     def query_memory_retrieve(self, system=None, since=None, limit=50):
         """记忆检索记录"""
-        since_clause = "AND timestamp > ?" if since else ""
+        since_clause = "AND e.timestamp > ?" if since else ""
         sql = f"""
-            SELECT system,
-                   json_extract(payload, '$.results_count') AS results_count,
-                   json_extract(payload, '$.latency_ms') AS latency_ms,
-                   timestamp
-            FROM events
-            WHERE event_type='ying.retrieve'
-              AND (system = ? OR ? IS NULL)
+            SELECT e.system, e.storage_tier, e.payload, b.payload_blob, e.timestamp
+            FROM events e LEFT JOIN events_blob b ON e.id = b.event_id
+            WHERE e.event_type='ying.retrieve'
+              AND (e.system = ? OR ? IS NULL)
               {since_clause}
-            ORDER BY timestamp DESC
+            ORDER BY e.timestamp DESC
             LIMIT ?
         """
         params = [system, system]
@@ -203,8 +287,22 @@ class QueryBridge:
             params.insert(2, since)
         params.append(limit)
         rows = self._conn.execute(sql, params).fetchall()
-        cols = ["system", "results_count", "latency_ms", "timestamp"]
-        return [dict(zip(cols, r)) for r in rows]
+        cols = ["system", "storage_tier", "payload", "payload_blob", "timestamp"]
+        result = []
+        for r in rows:
+            d = dict(zip(cols, r))
+            p = resolve_payload(d)
+            if not isinstance(p, dict):
+                continue
+            result.append(
+                {
+                    "system": d["system"],
+                    "results_count": (p.get("layer_agent") or p).get("results_count"),
+                    "latency_ms": (p.get("layer_agent") or p).get("latency_ms"),
+                    "timestamp": d["timestamp"],
+                }
+            )
+        return result
 
     def query_agent_status(self):
         """Agent 在线状态（已注册系统的最后活跃时间）"""
@@ -231,41 +329,50 @@ class QueryBridge:
         cutoff = now - window
         lookback = now - window * 12
         sql = """
-            SELECT system,
-                   SUM(CASE WHEN timestamp > ?
-                       THEN json_extract(payload, '$.layer_llm.input_tokens') +
-                            json_extract(payload, '$.layer_llm.output_tokens')
-                       ELSE 0 END) AS recent_tokens,
-                   AVG(CASE WHEN timestamp <= ?
-                       THEN json_extract(payload, '$.layer_llm.input_tokens') +
-                            json_extract(payload, '$.layer_llm.output_tokens')
-                       ELSE NULL END) AS baseline_avg,
-                   COUNT(CASE WHEN timestamp > ? THEN 1 END) AS recent_calls,
-                   COUNT(CASE WHEN timestamp <= ? THEN 1 END) AS baseline_calls
-            FROM events
-            WHERE event_type='llm_invoke'
-              AND timestamp > ?
-              AND (system = ? OR ? IS NULL)
-            GROUP BY system
-            HAVING recent_tokens > baseline_avg * ? AND baseline_avg > 0
+            SELECT e.system, e.storage_tier, e.payload, b.payload_blob, e.timestamp
+            FROM events e LEFT JOIN events_blob b ON e.id = b.event_id
+            WHERE e.event_type='llm_invoke'
+              AND e.timestamp > ?
+              AND (e.system = ? OR ? IS NULL)
         """
-        rows = self._conn.execute(
-            sql, (cutoff, cutoff, cutoff, cutoff, lookback, system, system, threshold)
-        ).fetchall()
-        cols = [
-            "system",
-            "recent_tokens",
-            "baseline_avg",
-            "recent_calls",
-            "baseline_calls",
-        ]
-        results = [dict(zip(cols, r)) for r in rows]
-        for r in results:
-            r["spike_ratio"] = round(
-                r["recent_tokens"] / r["baseline_avg"] if r["baseline_avg"] > 0 else 0,
-                2,
-            )
-            r["window_seconds"] = window
+        rows = self._conn.execute(sql, (lookback, system, system)).fetchall()
+        cols = ["system", "storage_tier", "payload", "payload_blob", "timestamp"]
+        recent_agg = {}
+        baseline_agg = {}
+        for r in rows:
+            d = dict(zip(cols, r))
+            p = resolve_payload(d)
+            if not isinstance(p, dict):
+                continue
+            inp = (p.get("layer_llm") or {}).get("input_tokens", 0) or 0
+            out = (p.get("layer_llm") or {}).get("output_tokens", 0) or 0
+            tokens = inp + out
+            sys_name = d["system"]
+            if sys_name not in recent_agg:
+                recent_agg[sys_name] = {"tokens": 0, "calls": 0}
+                baseline_agg[sys_name] = {"tokens": 0, "calls": 0}
+            if d["timestamp"] > cutoff:
+                recent_agg[sys_name]["tokens"] += tokens
+                recent_agg[sys_name]["calls"] += 1
+            if d["timestamp"] <= cutoff:
+                baseline_agg[sys_name]["tokens"] += tokens
+                baseline_agg[sys_name]["calls"] += 1
+        results = []
+        for sys_name in recent_agg:
+            r = recent_agg[sys_name]
+            b = baseline_agg.get(sys_name, {"tokens": 0, "calls": 0})
+            baseline_avg = b["tokens"] / b["calls"] if b["calls"] > 0 else 0
+            if r["tokens"] > baseline_avg * threshold and baseline_avg > 0:
+                results.append(
+                    {
+                        "system": sys_name,
+                        "recent_tokens": r["tokens"],
+                        "baseline_avg": baseline_avg,
+                        "recent_calls": r["calls"],
+                        "baseline_calls": b["calls"],
+                        "spike_ratio": round(r["tokens"] / baseline_avg, 2),
+                    }
+                )
         return results
 
     def query_event_timeline(self, system=None, since=None, limit=200):

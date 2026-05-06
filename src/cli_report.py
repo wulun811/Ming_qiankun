@@ -1,7 +1,8 @@
-# cli_report.py —— 0.11.9m 诊断报告命令
-# 职责：体检中心模式报告（系统→疾病，健康等级，忽略/归档感知）
+# cli_report.py —— 0.11.10 诊断报告命令
+# 职责：体检中心模式报告 + 月度摘要（--month）
 import json, sqlite3, time, sys, os, subprocess
 from pathlib import Path
+from datetime import datetime
 
 DB = Path.home() / ".ming" / "ming.db"
 HOT = Path.home() / ".ming" / "hot"
@@ -12,6 +13,14 @@ ARCHIVED_PATH = Path.home() / ".ming" / "archived_diseases.json"
 RESETS_PATH = Path.home() / ".ming" / "health_resets.json"
 DISEASES_YAML = Path(__file__).parent.parent / "config" / "diseases.yaml"
 TRIAGE_SNAPSHOT = Path.home() / ".ming" / "triage_snapshot.json"
+
+from archiver_compress import resolve_payload
+
+try:
+    from archiver_summary import summarize_month, load_monthly_summary
+except ImportError:
+    summarize_month = None
+    load_monthly_summary = None
 
 ICON_SEV = {"P0": "🔴", "P1": "🟡", "P2": "🟢"}
 ICON_HL = {
@@ -162,7 +171,102 @@ def _probe_status_icon(pt):
     return ""
 
 
+def _fmt_month_report(year_month, rows):
+    now = time.time()
+    by_system = {}
+    for r in rows:
+        sys_name = r["system"]
+        if sys_name not in by_system:
+            by_system[sys_name] = {"total": 0, "errors": 0, "types": {}}
+        by_system[sys_name]["total"] += r["total_count"]
+        by_system[sys_name]["errors"] += r["error_count"]
+        by_system[sys_name]["types"][r["event_type"]] = r["total_count"]
+
+    ym_pretty = year_month.replace("_", "年") + "月"
+    sys.stdout.write(f"╔══════════════════════════════════════════════════════════╗\n")
+    sys.stdout.write(
+        f"║  乾坤镜月度报告  {ym_pretty}                                 ║\n"
+    )
+    sys.stdout.write(
+        f"╚══════════════════════════════════════════════════════════╝\n\n"
+    )
+
+    for sys_name, info in sorted(by_system.items()):
+        total = info["total"]
+        errors = info["errors"]
+        ok = total - errors
+        rate = (ok / total * 100) if total > 0 else 0
+        top = sorted(info["types"].items(), key=lambda x: -x[1])[:3]
+        top_str = "  ".join(f"{t}:{c}" for t, c in top)
+        sys.stdout.write(
+            f"  {sys_name:<12s}  {total:>8,} 事件  |  {errors:>5} 错误  |  成功 {rate:.1f}%\n"
+        )
+        if top_str:
+            sys.stdout.write(f"    top: {top_str}\n")
+        sys.stdout.write("\n")
+
+    total_all = sum(v["total"] for v in by_system.values())
+    total_err = sum(v["errors"] for v in by_system.values())
+    sys.stdout.write(f"── 合计: {total_all:,} 事件, {total_err:,} 错误 ──\n")
+    sys.stdout.write(f"  报告生成: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+
+
+def _cmd_monthly_report(year_month, json_output):
+    if not load_monthly_summary:
+        print(
+            "archiver_summary plugin not available (delete archiver_summary.py to re-enable)"
+        )
+        return
+    if not DB.exists():
+        print("DB not found")
+        return
+    try:
+        conn = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+        rows = load_monthly_summary(conn, year_month)
+        if rows:
+            if json_output:
+                out = {"year_month": year_month, "systems": {}}
+                for r in rows:
+                    s = r["system"]
+                    if s not in out["systems"]:
+                        out["systems"][s] = {"total": 0, "errors": 0, "types": {}}
+                    out["systems"][s]["total"] += r["total_count"]
+                    out["systems"][s]["errors"] += r["error_count"]
+                    out["systems"][s]["types"][r["event_type"]] = r["total_count"]
+                print(json.dumps(out, indent=2, ensure_ascii=False))
+            else:
+                _fmt_month_report(year_month, rows)
+        else:
+            result = summarize_month(conn, year_month)
+            conn.close()
+            conn = None
+            if result and "skipped" in result:
+                print(f"月度报告 {year_month}: {result['skipped']}")
+            elif result and "error" in result:
+                print(f"月度报告 {year_month} 聚合失败: {result['error']}")
+            else:
+                conn2 = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
+                conn2.row_factory = sqlite3.Row
+                rows2 = load_monthly_summary(conn2, year_month)
+                if rows2:
+                    if json_output:
+                        print(json.dumps(result, indent=2, ensure_ascii=False))
+                    else:
+                        _fmt_month_report(year_month, rows2)
+                conn2.close()
+                return
+    finally:
+        if conn:
+            conn.close()
+
+
 def cmd_report(args):
+    month = getattr(args, "month", None)
+    if month:
+        _cmd_monthly_report(month, getattr(args, "json", False))
+        return
+
     days = getattr(args, "days", 1) or 1
     since = time.time() - days * 86400
     now = time.time()
@@ -204,7 +308,7 @@ def cmd_report(args):
         print(f"╚══════════════════════════════════════════════════════════╝")
         return
 
-    KNOWN_PROBES = {"tusunsun", "langchain", "openclaw", "mingjing"}
+    KNOWN_PROBES = {"tusunsun", "langchain", "openclaw", "mingjing", "opencode"}
 
     def _is_known(s):
         return any(s == name or s.startswith(name + "_") for name in KNOWN_PROBES)
@@ -671,16 +775,16 @@ def _print_footprint():
             conn = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
             conn.execute("PRAGMA busy_timeout=3000")
             row = conn.execute(
-                "SELECT payload FROM events WHERE event_type='platform_snapshot' "
-                "AND system='__host__' ORDER BY timestamp DESC LIMIT 1"
+                "SELECT e.payload, e.storage_tier, b.payload_blob "
+                "FROM events e LEFT JOIN events_blob b ON e.id = b.event_id "
+                "WHERE e.event_type='platform_snapshot' "
+                "AND e.system='__host__' ORDER BY e.timestamp DESC LIMIT 1"
             ).fetchone()
             conn.close()
             if row:
-                try:
-                    pl = json.loads(row[0])
+                pl = resolve_payload(row)
+                if pl:
                     self_cpu = pl.get("cpu_percent", 0.0)
-                except (json.JSONDecodeError, TypeError):
-                    pass
         except sqlite3.OperationalError:
             pass
     print(f"  {'mingjing':<20s} RSS {self_rss:>5.0f} MB   CPU {self_cpu:>5.1f}%")
@@ -691,15 +795,16 @@ def _print_footprint():
             conn = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
             conn.execute("PRAGMA busy_timeout=3000")
             rows = conn.execute(
-                "SELECT system, pid FROM system_pid WHERE pid > 0 ORDER BY system"
+                "SELECT system, pid, mode FROM system_pid WHERE pid > 0 ORDER BY system"
             ).fetchall()
             conn.close()
-            for system, pid in rows:
+            for system, pid, mode in rows:
                 if system == "mingjing":
                     continue
                 rss = _read_proc_rss(pid)
                 cpu = _proc_cpu(pid)
                 if rss > 0:
-                    print(f"  {system:<20s} RSS {rss:>5.0f} MB   CPU {cpu:>5.1f}%")
+                    label = f"{system}(probe)" if mode == "black" else system
+                    print(f"  {label:<20s} RSS {rss:>5.0f} MB   CPU {cpu:>5.1f}%")
         except sqlite3.OperationalError:
             pass

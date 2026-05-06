@@ -216,6 +216,8 @@ class TestArchiverCore(unittest.TestCase):
 
     def test_T16_auto_backup(self):
         """T16: 自动备份，保留最近 5 个备份"""
+        self.a._startup_time = 0
+        self.a._last_backup = 0
         self.a._auto_backup()
         backups = list(self.db.parent.glob("ming_*.db.bak"))
         self.assertTrue(len(backups) > 0)

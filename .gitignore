@@ -52,6 +52,3 @@ src/plugins/web_dashboard/data.json
 # Build artifacts
 dist/
 mingjing.egg-info/
-
-# Internal dev instructions
-AGENTS.md

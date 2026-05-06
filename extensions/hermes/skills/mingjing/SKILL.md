@@ -173,6 +173,7 @@ cd ~/ming-run
 | `./ming report --days 7` | 近一周综合报告（自动感知忽略/归档/复位状态） |
 | `./ming report --json` | JSON 格式（含 instances 数组，每实例健康/疾病/P0-P2） |
 | `./ming status` | 查看归档器运行状态 + 实例健康一览 |
+| `./ming upgrade` | **一键升级乾坤镜到最新版并自动重启** |
 | `./ming instance-list` | 紧凑表格：实例、探针、健康、P0/P1/P2、复位/归档标记 |
 
 ### 疾病操作（体检中心）🆕 v0.11.7
@@ -351,6 +352,15 @@ cd ~/ming-run
 | `~/.ming/triage_snapshot.json` | 最近分诊快照 |
 | `~/.ming/.archiver_heartbeat` | Archiver 心跳时间戳 |
 
+## 升级乾坤镜
+
+```bash
+cd ~/ming-run
+./ming upgrade
+```
+
+自动执行 `pip install --upgrade mingjing` → 检测运行方式 → 自动重启。
+
 ## 停止服务
 
 ```bash
@@ -378,7 +388,7 @@ cd ~/ming-run
 
 | 版本 | 关键信息 |
 |------|---------|
- | v0.11.9m (当前) | 凭据保险库 + 全量审计修复 + 底座瘦身（1356<!--M=base_subtotal--> 行）+ 160 种诊断 |
+ | v0.11.10 (当前) | 三级存储压缩（zlib, -27% DB 体积）+ ming upgrade 一键升级 + token 统计修复 |
  | v0.11.7 | 体检中心模式：4 级健康评估、忽略/归档/复位/恢复操作、逐实例报告、`instance-list` / `ignore` / `archive-disease` / `restore` / `reset` / `reset-status` 命令；~89 条 Hermes-ready（合成 agent_step + OS 采样 + deep extract） |
 | v0.11.6 | 157 条规则，69 条 Hermes-ready |
 | v0.11.5 | 66 ready，role/error_type 字段 |

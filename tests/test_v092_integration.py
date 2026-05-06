@@ -186,10 +186,11 @@ class TestV092Integration(unittest.TestCase):
         print("  PASS: 归档器心跳")
 
     def test_09_backup(self):
-        time.sleep(1.1)
         a = Archiver()
         a._alive = True
-        a.run_once()
+        a._startup_time = 0
+        a._last_backup = 0
+        a._auto_backup()
         backups = list(Archiver.DB.parent.glob("ming_*.db.bak"))
         self.assertGreater(len(backups), 0, "备份文件不存在")
         print("  PASS: 自动备份")

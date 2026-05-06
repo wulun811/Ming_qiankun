@@ -1,7 +1,8 @@
-# archiver_schema.py —— 0.11.9m 数据库 Schema 初始化
+# archiver_schema.py —— 0.11.10 数据库 Schema 初始化
 # 职责：CREATE TABLE / INDEX 语句（一次性的 DDL）
-# 安全：不 import sqlite3，conn 由 archiver.py 传入
+# 安全：仅使用标准库，conn 由 archiver.py 传入
 import time
+import sqlite3
 
 
 def init_diagnoses_table(cursor, year=None):
@@ -66,6 +67,40 @@ def init_schema(conn):
             mode TEXT NOT NULL DEFAULT 'white'
         )
     """)
+    # v0.11.10: 新增 events 列（压缩兼容）
+    for col_def in [
+        "payload_hash TEXT NOT NULL DEFAULT ''",
+        "payload_blob BLOB",
+        "storage_tier INTEGER DEFAULT 0",
+        "compress_attempts INTEGER DEFAULT 0",
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE events ADD COLUMN {col_def}")
+        except sqlite3.OperationalError:
+            pass
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS events_blob (
+            event_id INTEGER PRIMARY KEY REFERENCES events(id),
+            payload_blob BLOB
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS monthly_summary (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            year_month TEXT NOT NULL,
+            system TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            total_count INTEGER DEFAULT 0,
+            error_count INTEGER DEFAULT 0,
+            avg_payload_bytes REAL DEFAULT 0,
+            total_tokens_est INTEGER DEFAULT 0,
+            min_timestamp REAL,
+            max_timestamp REAL,
+            summary_json TEXT,
+            last_aggregated_at REAL,
+            UNIQUE(year_month, system, event_type)
+        )
+    """)
     init_diagnoses_table(conn)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS expectations (
@@ -114,6 +149,9 @@ def init_schema(conn):
     """)
     conn.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_events_curr_hash ON events(curr_hash)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_events_compress ON events(storage_tier, timestamp)"
     )
     conn.execute("""
         CREATE TABLE IF NOT EXISTS system_anchors (

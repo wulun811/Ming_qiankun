@@ -112,6 +112,25 @@ docker run -d --name ming -p 18088:18088 mingjing
 
 ---
 
+## 升级兼容性
+
+探针通过 monkey-patch 和 PEP 302 import hook 自动激活，**升级 `langchain-core` 后需要验证探针是否仍正常工作**。
+
+**升级 langchain-core 后，探针会自动检测版本并输出到 stderr：**
+
+```
+[ming-probe-langchain] langchain-core 0.3.25 detected. Tested: >=1.0. See README for compatibility.
+```
+
+验证方法：
+
+1. 启动任意使用 LangChain 的 Python 脚本，检查 stderr 是否有版本信息
+2. 运行快速验证：`python -c "import ming_probe_langchain; print('OK')"`
+3. 检查热轨目录 `~/.ming/hot/` 是否有新 `.jsonl` 文件
+4. 确认归档器运行正常：`python -m mingjing health`
+
+> **注意**：LangChain 大版本升级可能改变内部模块路径或方法签名，导致 monkey-patch 静默失效（探针不报错但不产生事件）。如果升级后探针不工作，请检查 `langchain-core` 版本是否仍在支持范围内。
+
 ## 兼容性
 
 | 环境 | 要求 |

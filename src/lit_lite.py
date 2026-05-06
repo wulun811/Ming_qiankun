@@ -15,6 +15,7 @@ from lit_rule import (
     set_incremental_since,
     _load_env_profile,
     resolve_env_sql,
+    resolve_per_system,
 )
 from lit_dx import write_dx
 from archiver_exclude import is_system_excluded
@@ -61,6 +62,50 @@ def _push_p0_diagnoses(p0_hits):
     except Exception as e:
         sys.stderr.write(f"[lit_lite] P0 push failed: {e}\n")
         sys.stderr.flush()
+
+
+def _apply_black_mode_penalty(conn, diagnoses):
+    try:
+        window = 1800
+        now = time.time()
+        ev_types = set()
+        for dx in diagnoses:
+            ev_types.update(dx.get("event_types", set()))
+        if not ev_types:
+            return
+        placeholders = ",".join("?" for _ in ev_types)
+        rows = conn.execute(
+            f"""
+            SELECT system, event_type,
+                   SUM(CASE WHEN mode = 'black' THEN 1 ELSE 0 END) as black_cnt,
+                   COUNT(*) as total_cnt
+            FROM events
+            WHERE event_type IN ({placeholders}) AND timestamp > ?
+            GROUP BY system, event_type
+            """,
+            list(ev_types) + [now - window],
+        ).fetchall()
+        mode_map = {}
+        for system, ev_type, black_cnt, total_cnt in rows:
+            if total_cnt > 0:
+                mode_map[(system, ev_type)] = black_cnt / total_cnt
+        for dx in diagnoses:
+            if dx.get("severity") == "P0":
+                continue
+            ratios = []
+            for et in dx.get("event_types", set()):
+                r = mode_map.get((dx["system"], et), 0.0)
+                if r > 0:
+                    ratios.append(r)
+            if not ratios:
+                continue
+            avg_black = sum(ratios) / len(ratios)
+            if avg_black > 0.8:
+                dx["confidence"] *= 0.6
+            elif avg_black > 0.5:
+                dx["confidence"] *= 0.8
+    except Exception:
+        pass
 
 
 def diagnose():
@@ -271,6 +316,10 @@ def diagnose():
             system = ev.pop("system", "mingjing")
             if is_system_excluded(system):
                 continue
+            ps = resolve_per_system(rule, system)
+            if not ps["enabled"]:
+                continue
+            row_conf = conf * ps["confidence_multiplier"]
             rule_dep = rule.get("depends", {})
             _all_diagnoses.append(
                 {
@@ -278,8 +327,8 @@ def diagnose():
                     "rule_id": rule_id,
                     "name": name,
                     "severity": severity,
-                    "confidence": conf,
-                    "original_confidence": conf,
+                    "confidence": row_conf,
+                    "original_confidence": row_conf,
                     "evidence": [ev],
                     "inference": description,
                     "event_types": set(rule_dep.get("event_types", [])),
@@ -312,6 +361,9 @@ def diagnose():
             "部分诊断规则无法执行，请检查规则定义",
             "sql_errors",
         )
+
+    if _all_diagnoses:
+        _apply_black_mode_penalty(conn, _all_diagnoses)
 
     if _all_diagnoses and apply_cross_validation is not None:
         promoted = apply_cross_validation(_all_diagnoses, disease_map)

@@ -1,18 +1,34 @@
 # Mingjing — AI Agent Diagnostic Refraction Array
 
+> **Repo** `Ming_qiankun` · **PyPI** `mingjing` · **CLI** `ming`
+>
 > **Zero-intrusion observability** for LLM calls, tool execution, memory retrieval, and Agent orchestration.
 >
 > [🌏 中文](./README.md) | [📖 Full Docs](updocs/)
+
+[![PyPI](https://img.shields.io/pypi/v/mingjing?color=blue)](https://pypi.org/project/mingjing/)
+[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-BUSL--1.1-green.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-430%2F0%2F0-brightgreen)]()
+
+[![Dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen)]()
+[![Efficiency](https://img.shields.io/badge/0_LLM_·_0_Writeback_·_RSS%3C50MB-brightgreen)]()
+[![Storage](https://img.shields.io/badge/212K_events-196MB-brightgreen)]()
+[![Compression](https://img.shields.io/badge/v0.11.10_Compression-43%25-brightgreen)]()
+[![PRs](https://img.shields.io/badge/PRs-welcome-orange)](https://github.com/wulun811/Ming_qiankun/pulls)
+
+[![OpenClaw](https://img.shields.io/badge/OpenClaw-%E2%9C%93_verified-brightgreen)]()
+[![OpenCode](https://img.shields.io/badge/OpenCode-%E2%9C%93_verified-brightgreen)]()
+[![Hermes](https://img.shields.io/badge/Hermes-%E2%9C%93_verified-brightgreen)]()
+[![LangChain](https://img.shields.io/badge/LangChain-%E2%9C%93_verified-brightgreen)]()
+
+> **License**: Mingjing uses **Business Source License 1.1**. Free production use for companies/individuals with annual revenue < $100K. Non-production use unrestricted. **Automatically converts to Apache 2.0 on 2030-12-31**.
 
 ![Mingjing LOGO](updocs/image/logo.png)
 
 ![Architecture](updocs/image/mingimageen.png)
 
-[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-BUSL--1.1-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.11.9m-green.svg)](https://pypi.org/project/mingjing/)
-
-> **License**: Mingjing uses **Business Source License 1.1**. Free production use for companies/individuals with annual revenue < $100K. Non-production use unrestricted. **Automatically converts to Apache 2.0 on 2030-12-31**.
+![Web Dashboard Screenshot](updocs/image/jietu.jpg)
 
 **Mingjing is LIT 1.4's lightweight refraction array, not a standalone diagnostic platform.** It provides zero-intrusion observability for OpenClaw, Hermes, LangChain, and other Agent frameworks via hot-rail JSONL files + SQLite/MySQL persistence layer (LlamaIndex, CrewAI, OpenHands, AutoGPT adapters are pending community contribution).
 
@@ -97,17 +113,31 @@ ming web start
 
 ### Adapters (Official Reference)
 
-| Adapter | Language | Events |
-|---------|----------|--------|
-| **OpenClaw** | Node.js | llm_invoke, tool_call, error |
-| **Hermes** | Python | llm_invoke, tool_call, memory_retrieve |
-| **LangChain** | Python | llm_invoke, tool_call, memory_retrieve |
-| LlamaIndex | Python | llm_invoke, memory_retrieve, agent_step (pending) |
-| CrewAI | Python | agent_step, llm_invoke (pending) |
-| OpenHands | Python | agent_step, llm_invoke, tool_call (pending) |
-| AutoGPT | Python | agent_step, llm_invoke (pending) |
+| Adapter | Language | Events | Method |
+|---------|----------|--------|--------|
+| **OpenClaw** | Node.js | llm_invoke, tool_call, error | Node.js plugin |
+| **OpenCode** | Python | llm_invoke, tool_call, error | DB poller wrapper |
+| **Hermes** | Python | llm_invoke, tool_call, memory_retrieve | Hermes Skill |
+| **LangChain** | Python | llm_invoke, tool_call, memory_retrieve | Pip package + monkey-patch |
+| LlamaIndex | Python | llm_invoke, memory_retrieve, agent_step (pending) | — |
+| CrewAI | Python | agent_step, llm_invoke (pending) | — |
+| OpenHands | Python | agent_step, llm_invoke, tool_call (pending) | — |
+| AutoGPT | Python | agent_step, llm_invoke (pending) | — |
 
-> All adapters use **monkey-patch + zero third-party dependency** design. Silent degradation when target framework is not installed. Items marked "(pending)" are community contribution directions — PRs welcome.
+> Items marked "(pending)" are community contribution directions — PRs welcome.
+
+### Adapter Upgrade Checklist
+
+After upgrading the host platform (OpenClaw / OpenCode / Hermes / LangChain), verify the probe still works:
+
+| Adapter | Post-upgrade action | Verification command |
+|---------|--------------------|---------------------|
+| **OpenClaw** | Must re-register the plugin | `openclaw plugins install --link ~/.openclaw/extensions/mingjing-probe/index.js` |
+| **Hermes** | **No action needed** (hooks API is stable) | `hermes plugins list && ls ~/.ming/hot/ \| head` |
+| **OpenCode** | Check stderr for schema warnings | Launch probe and check `~/.ming/hot/` for new files |
+| **LangChain** | Run quick verification | `python -c "import ming_probe_langchain; print('OK')"` |
+
+For all adapters, run `python -m mingjing health` to confirm the archiver is running.
 
 ![OpenClaw Screenshot — Ask about health status anytime](updocs/image/openclawyanshi.png)
 

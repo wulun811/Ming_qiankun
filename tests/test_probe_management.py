@@ -99,7 +99,9 @@ def _seed_test_data(db_path, system="test_sys", events=5, last_seen_offset=0):
 class TestProbeList(unittest.TestCase):
     def setUp(self):
         self.td = tempfile.TemporaryDirectory()
-        self.home, self.ming, self.hot, self.cold, self.db, self.paused = _make_test_home(self.td.name)
+        self.home, self.ming, self.hot, self.cold, self.db, self.paused = (
+            _make_test_home(self.td.name)
+        )
 
     def tearDown(self):
         self.td.cleanup()
@@ -163,15 +165,19 @@ class TestProbeList(unittest.TestCase):
 class TestProbeUninstall(unittest.TestCase):
     def setUp(self):
         self.td = tempfile.TemporaryDirectory()
-        self.home, self.ming, self.hot, self.cold, self.db, self.paused = _make_test_home(self.td.name)
+        self.home, self.ming, self.hot, self.cold, self.db, self.paused = (
+            _make_test_home(self.td.name)
+        )
 
     def tearDown(self):
         self.td.cleanup()
 
     def _make_args(self, system, **kwargs):
         """构造模拟的 argparse.Namespace"""
+
         class Args:
             pass
+
         a = Args()
         a.system = system
         a.dry_run = kwargs.get("dry_run", False)
@@ -183,7 +189,9 @@ class TestProbeUninstall(unittest.TestCase):
         with patch("cli_admin.Path.home", return_value=self.home):
             with patch("archiver_exclude.Path.home", return_value=self.home):
                 try:
-                    _cmd_probe_uninstall(self.db, self.hot, self.cold, self.paused, args)
+                    _cmd_probe_uninstall(
+                        self.db, self.hot, self.cold, self.paused, args
+                    )
                 except SystemExit:
                     pass
 
@@ -193,7 +201,9 @@ class TestProbeUninstall(unittest.TestCase):
             with patch("archiver_exclude.Path.home", return_value=self.home):
                 with patch("sys.stdout", captured):
                     try:
-                        _cmd_probe_uninstall(self.db, self.hot, self.cold, self.paused, args)
+                        _cmd_probe_uninstall(
+                            self.db, self.hot, self.cold, self.paused, args
+                        )
                     except SystemExit:
                         pass
         return captured.getvalue()
@@ -228,7 +238,9 @@ class TestProbeUninstall(unittest.TestCase):
         self.assertIn("dry-run", output)
         self.assertIn("dry_test", output)
         conn = sqlite3.connect(f"file:{self.db}?mode=ro", uri=True)
-        cnt = conn.execute("SELECT COUNT(*) FROM events WHERE system='dry_test'").fetchone()[0]
+        cnt = conn.execute(
+            "SELECT COUNT(*) FROM events WHERE system='dry_test'"
+        ).fetchone()[0]
         conn.close()
         self.assertEqual(cnt, 5, "dry-run 不应删除数据")
 
@@ -242,7 +254,9 @@ class TestProbeUninstall(unittest.TestCase):
         args = self._make_args("keep_test", force=True, keep_data=True)
         self._run_uninstall(args)
         conn = sqlite3.connect(f"file:{self.db}?mode=ro", uri=True)
-        cnt = conn.execute("SELECT COUNT(*) FROM events WHERE system='keep_test'").fetchone()[0]
+        cnt = conn.execute(
+            "SELECT COUNT(*) FROM events WHERE system='keep_test'"
+        ).fetchone()[0]
         conn.close()
         self.assertEqual(cnt, 3, "keep-data 应保留 DB 记录")
         self.assertFalse(hot_file.exists(), "热轨文件应被删除")
@@ -262,19 +276,31 @@ class TestProbeUninstall(unittest.TestCase):
         _seed_test_data(self.db, "full_test", events=10)
         self.hot.mkdir(parents=True, exist_ok=True)
         for i in range(3):
-            (self.hot / f"full_test_2026010{i}_000000_{i}2345.jsonl").write_text('{"x":' + str(i) + '}\n')
+            (self.hot / f"full_test_2026010{i}_000000_{i}2345.jsonl").write_text(
+                '{"x":' + str(i) + "}\n"
+            )
         self.cold.mkdir(parents=True, exist_ok=True)
         (self.cold / "full_test_cold.jsonl").write_text('{"cold":true}\n')
         args = self._make_args("full_test", force=True)
         self._run_uninstall(args)
 
         conn = sqlite3.connect(f"file:{self.db}?mode=ro", uri=True)
-        evt_cnt = conn.execute("SELECT COUNT(*) FROM events WHERE system='full_test'").fetchone()[0]
-        pid_cnt = conn.execute("SELECT COUNT(*) FROM system_pid WHERE system='full_test'").fetchone()[0]
-        exp_cnt = conn.execute("SELECT COUNT(*) FROM expectations WHERE system='full_test'").fetchone()[0]
-        hlth_cnt = conn.execute("SELECT COUNT(*) FROM probe_health WHERE system='full_test'").fetchone()[0]
+        evt_cnt = conn.execute(
+            "SELECT COUNT(*) FROM events WHERE system='full_test'"
+        ).fetchone()[0]
+        pid_cnt = conn.execute(
+            "SELECT COUNT(*) FROM system_pid WHERE system='full_test'"
+        ).fetchone()[0]
+        exp_cnt = conn.execute(
+            "SELECT COUNT(*) FROM expectations WHERE system='full_test'"
+        ).fetchone()[0]
+        hlth_cnt = conn.execute(
+            "SELECT COUNT(*) FROM probe_health WHERE system='full_test'"
+        ).fetchone()[0]
         year = time.strftime("%Y")
-        dx_cnt = conn.execute(f"SELECT COUNT(*) FROM diagnoses_{year} WHERE system='full_test'").fetchone()[0]
+        dx_cnt = conn.execute(
+            f"SELECT COUNT(*) FROM diagnoses_{year} WHERE system='full_test'"
+        ).fetchone()[0]
         conn.close()
 
         self.assertEqual(evt_cnt, 0, "events 应清空")
@@ -287,13 +313,8 @@ class TestProbeUninstall(unittest.TestCase):
         hot_left = list(self.hot.glob("full_test_*.jsonl"))
         self.assertEqual(len(hot_left), 0, "热轨文件应清空")
 
-        backup_files = list(self.cold.glob("full_test_backup_*.jsonl"))
-        self.assertEqual(len(backup_files), 1, "应有备份文件")
         cold_left = list(self.cold.glob("full_test_*.jsonl"))
-        cold_others = [f for f in cold_left if "backup" not in f.name]
-        self.assertEqual(len(cold_others), 0, "原冷轨文件应清空（备份除外）")
-        backup_content = backup_files[0].read_text().strip().split("\n")
-        self.assertEqual(len(backup_content), 10, "备份应包含所有事件")
+        self.assertEqual(len(cold_left), 0, "冷轨文件应清空")
 
     # ── 无DB记录仅清理文件 ──
     def test_no_db_records_file_only(self):
@@ -301,7 +322,9 @@ class TestProbeUninstall(unittest.TestCase):
         (self.hot / "ghost_20260101_000000_12345.jsonl").write_text('{"x":1}\n')
         args = self._make_args("ghost", force=True)
         self._run_uninstall(args)
-        self.assertFalse((self.hot / "ghost_20260101_000000_12345.jsonl").exists(), "应清理文件")
+        self.assertFalse(
+            (self.hot / "ghost_20260101_000000_12345.jsonl").exists(), "应清理文件"
+        )
         self.assertTrue((self.paused / "ghost").exists(), "应创建暂停标记")
 
     # ── 审计日志 ──
@@ -332,7 +355,15 @@ class TestProbeUninstall(unittest.TestCase):
         """)
         conn.execute(
             "INSERT INTO diagnoses_2025 (system, fault_id, diagnosis_name, confidence, severity, status, created_at) VALUES (?,?,?,?,?,?,?)",
-            ("old_dx_test", "OLD-001", "Old diagnosis", 0.5, "P2", "resolved", time.time() - 365 * 86400),
+            (
+                "old_dx_test",
+                "OLD-001",
+                "Old diagnosis",
+                0.5,
+                "P2",
+                "resolved",
+                time.time() - 365 * 86400,
+            ),
         )
         conn.commit()
         conn.close()
@@ -340,8 +371,12 @@ class TestProbeUninstall(unittest.TestCase):
         self._run_uninstall(args)
 
         conn = sqlite3.connect(f"file:{self.db}?mode=ro", uri=True)
-        dx2025 = conn.execute("SELECT COUNT(*) FROM diagnoses_2025 WHERE system='old_dx_test'").fetchone()[0]
-        dx2026 = conn.execute(f"SELECT COUNT(*) FROM diagnoses_{time.strftime('%Y')} WHERE system='old_dx_test'").fetchone()[0]
+        dx2025 = conn.execute(
+            "SELECT COUNT(*) FROM diagnoses_2025 WHERE system='old_dx_test'"
+        ).fetchone()[0]
+        dx2026 = conn.execute(
+            f"SELECT COUNT(*) FROM diagnoses_{time.strftime('%Y')} WHERE system='old_dx_test'"
+        ).fetchone()[0]
         conn.close()
         self.assertEqual(dx2025, 0, "2025年诊断应清空")
         self.assertEqual(dx2026, 0, "今年诊断应清空")
@@ -352,7 +387,9 @@ class TestProbeUninstall(unittest.TestCase):
         with patch("cli_admin.Path.home", return_value=self.home):
             with patch("archiver_exclude.Path.home", return_value=self.home):
                 with self.assertRaises(SystemExit) as ctx:
-                    _cmd_probe_uninstall(self.db, self.hot, self.cold, self.paused, args)
+                    _cmd_probe_uninstall(
+                        self.db, self.hot, self.cold, self.paused, args
+                    )
                 self.assertEqual(ctx.exception.code, 1)
 
 

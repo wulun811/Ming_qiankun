@@ -409,12 +409,13 @@
     event_types: ["llm_invoke", "tool_call"]
     fields: ["layer_network.target_host", "layer_network.status_code"]
   sql_template: |
-    SELECT json_extract(payload, '$.layer_network.target_host') as host,
+    SELECT system,
+           json_extract(payload, '$.layer_network.target_host') as host,
            COUNT(*) as total,
            SUM(CASE WHEN json_extract(payload, '$.layer_network.status_code') >= 400 THEN 1 ELSE 0 END) as errors
     FROM events WHERE event_type IN ('llm_invoke', 'tool_call') AND timestamp > ?
     AND json_extract(payload, '$.layer_network.target_host') IS NOT NULL
-    GROUP BY host HAVING errors * 1.0 / total > 0.3 AND total > 10
+    GROUP BY system, host HAVING errors * 1.0 / total > 0.3 AND total > 10
   description: 特定目标主机错误率超过 30%，该服务可能存在问题
 
 - id: NET-022
@@ -477,11 +478,12 @@
     event_types: ["llm_invoke", "tool_call"]
     fields: ["layer_network.target_host", "timestamp"]
   sql_template: |
-    SELECT json_extract(payload, '$.layer_network.target_host') as host,
+    SELECT system,
+           json_extract(payload, '$.layer_network.target_host') as host,
            COUNT(*) as concurrent
     FROM events WHERE event_type IN ('llm_invoke', 'tool_call') AND timestamp > ?
     AND json_extract(payload, '$.layer_network.target_host') IS NOT NULL
-    GROUP BY host, strftime('%s', datetime(timestamp, 'unixepoch')) / 10
+    GROUP BY system, host, strftime('%s', datetime(timestamp, 'unixepoch')) / 10
     HAVING concurrent > 50
   description: 同一目标主机并发连接数过高，可能连接池耗尽
 
@@ -624,6 +626,7 @@
   severity: P2
   scope: observable
   applicable: all
+  per_system: {"opencode":{"confidence_multiplier":0.7}}
   depends:
     event_types: ["llm_invoke"]
     fields: ["layer_llm.input_tokens", "layer_llm.output_tokens"]
@@ -632,7 +635,7 @@
            NULLIF(json_extract(payload, '$.layer_llm.output_tokens'), 0)) as ratio
     FROM events WHERE event_type='llm_invoke' AND timestamp > ?
     AND json_extract(payload, '$.layer_llm.output_tokens') > 0
-    GROUP BY system HAVING ratio > 20
+    GROUP BY system HAVING ratio > 60
   description: 输入 token 远超输出，提示词可能过于冗长
 
 - id: MDL-033
@@ -641,15 +644,17 @@
   severity: P1
   scope: observable
   applicable: all
+  per_system: {"opencode":{"confidence_multiplier":0.7}}
   depends:
     event_types: ["llm_invoke"]
     fields: ["layer_llm.latency_ms", "layer_llm.model"]
   sql_template: |
-    SELECT json_extract(payload, '$.layer_llm.model') as model,
+    SELECT system,
+           json_extract(payload, '$.layer_llm.model') as model,
            COUNT(*) as cnt
     FROM events WHERE event_type='llm_invoke' AND timestamp > ?
-    AND json_extract(payload, '$.layer_llm.latency_ms') > 5000
-    GROUP BY model
+    AND json_extract(payload, '$.layer_llm.latency_ms') > 30000
+    GROUP BY system, model
   description: 特定模型响应延迟超过 5 秒
 
 - id: MDL-034
@@ -658,6 +663,7 @@
   severity: P2
   scope: observable
   applicable: all
+  per_system: {"opencode":{"confidence_multiplier":0.7}}
   depends:
     event_types: ["llm_invoke"]
     fields: ["layer_llm.latency_ms"]
@@ -666,7 +672,7 @@
            AVG(json_extract(payload, '$.layer_llm.latency_ms')) as avg_lat,
            MAX(json_extract(payload, '$.layer_llm.latency_ms')) - MIN(json_extract(payload, '$.layer_llm.latency_ms')) as lat_range
     FROM events WHERE event_type='llm_invoke' AND timestamp > ?
-    GROUP BY system HAVING lat_range > avg_lat * 2
+    GROUP BY system HAVING lat_range > avg_lat * 5
   description: 延迟波动范围超过均值 2 倍，服务可能不稳定
 
 - id: MDL-035
@@ -690,6 +696,7 @@
   severity: P1
   scope: observable
   applicable: all
+  per_system: {"opencode":{"confidence_multiplier":0.2}}
   depends:
     event_types: ["llm_invoke"]
     fields: ["layer_llm.input_tokens", "layer_llm.output_tokens"]
@@ -699,7 +706,7 @@
                json_extract(payload, '$.layer_llm.output_tokens')) as tokens,
            COUNT(*) as cnt
     FROM events WHERE event_type='llm_invoke' AND timestamp > ?
-    GROUP BY system HAVING tokens > 100000
+    GROUP BY system HAVING tokens > 500000
   description: Token 消耗超过阈值，检查循环调用、模型降级或长文本输入
 
 - id: MDL-037
@@ -1123,14 +1130,21 @@
   severity: P1
   scope: observable
   applicable: all
+  per_system: {"opencode":{"enabled":false}}
   depends:
     event_types: ["llm_invoke"]
     fields: ["layer_llm.input_tokens", "layer_llm.output_tokens"]
   sql_template: |
-    SELECT system, COUNT(*) as cnt,
-           SUM(json_extract(payload, '$.layer_llm.input_tokens') + json_extract(payload, '$.layer_llm.output_tokens')) as tokens
-    FROM events WHERE event_type='llm_invoke' AND timestamp > ?
-    GROUP BY system HAVING cnt > 100
+    SELECT system, MAX(session_llm_cnt) as max_session_llm
+    FROM (
+      SELECT system,
+             json_extract(payload, '$.layer_agent.session_id') as session_id,
+             COUNT(*) as session_llm_cnt
+      FROM events WHERE event_type='llm_invoke' AND timestamp > ?
+      GROUP BY system, session_id
+    )
+    GROUP BY system
+    HAVING max_session_llm > 400
   description: LLM 调用频次和 Token 消耗呈 O(N²) 增长
 
 - id: AGT-059
@@ -1441,12 +1455,13 @@
     event_types: ["__health__"]
     fields: ["_incomplete"]
   sql_template: |
-    SELECT
+    SELECT system,
       SUM(CASE WHEN json_extract(payload, '$._incomplete') = 1 THEN 1 ELSE 0 END) as incomplete,
       COUNT(*) as total
     FROM events
     WHERE timestamp > ?
     AND event_type = '__health__'
+    GROUP BY system
     HAVING total > 0 AND (incomplete * 100.0 / total) > 10
   description: 不完整标记事件占比超过 10%，埋点质量差
 
@@ -1543,6 +1558,12 @@
     FROM events WHERE event_type='__health__' AND timestamp > ?
     AND json_extract(payload, '$.emit_success_count_1m') IS NOT NULL
     AND json_extract(payload, '$.emit_success_count_1m') < 2
+    AND EXISTS (
+      SELECT 1 FROM events e2
+      WHERE e2.system = events.system
+      AND e2.event_type NOT IN ('__health__', '__register__')
+      AND e2.timestamp > ?
+    )
     ORDER BY emit_rate ASC LIMIT 5
   description: 探针 emit 成功率突降超过 50%
 
@@ -1560,9 +1581,9 @@
     event_types: ["error"]
     fields: ["error_type"]
   sql_template: |
-    SELECT json_extract(payload, '$.error_type') as error_type, COUNT(*) as cnt FROM events
+    SELECT system, json_extract(payload, '$.error_type') as error_type, COUNT(*) as cnt FROM events
     WHERE event_type='error' AND timestamp > ?
-    GROUP BY json_extract(payload, '$.error_type') HAVING cnt > 10
+    GROUP BY system, json_extract(payload, '$.error_type') HAVING cnt > 10
   description: 同一错误类型 5 分钟内出现超过 10 次
 
 - id: DQT-087
@@ -1575,10 +1596,10 @@
     event_types: ["error"]
     fields: ["stack_trace"]
   sql_template: |
-    SELECT json_extract(payload, '$.stack_trace') as stack_trace, COUNT(*) as cnt FROM events
+    SELECT system, json_extract(payload, '$.stack_trace') as stack_trace, COUNT(*) as cnt FROM events
     WHERE event_type='error' AND timestamp > ?
     AND json_extract(payload, '$.stack_trace') IS NOT NULL
-    GROUP BY json_extract(payload, '$.stack_trace') HAVING cnt > 5
+    GROUP BY system, json_extract(payload, '$.stack_trace') HAVING cnt > 5
   description: 相同堆栈跟踪频繁出现，可能是同一根因
 
 - id: DQT-088
@@ -1887,11 +1908,12 @@
     event_types: ["kunxiansuo.tool_blocked"]
     fields: []
   sql_template: |
-    SELECT json_extract(payload, '$.layer_agent.session_id') as session_id,
+    SELECT system,
+           json_extract(payload, '$.layer_agent.session_id') as session_id,
            COUNT(*) as cnt FROM events
     WHERE event_type='kunxiansuo.tool_blocked'
       AND timestamp > ?
-    GROUP BY session_id
+    GROUP BY system, session_id
     HAVING cnt > 3
   description: 某 Agent 会话在短时间窗口内被捆仙索多次拦截工具调用，可能存在恶意行为
 
@@ -1904,11 +1926,12 @@
     event_types: ["kunxiansuo.schema_error"]
     fields: []
   sql_template: |
-    SELECT json_extract(payload, '$.layer_agent.session_id') as session_id,
+    SELECT system,
+           json_extract(payload, '$.layer_agent.session_id') as session_id,
            COUNT(*) as cnt FROM events
     WHERE event_type='kunxiansuo.schema_error'
       AND timestamp > ?
-    GROUP BY session_id
+    GROUP BY system, session_id
     HAVING cnt > 5
   description: LLM 调用土行孙工具时频繁传入不符合 Schema 的参数，建议调整 prompt 或检查工具定义
 
@@ -1939,11 +1962,12 @@
     event_types: ["sandbox.blocked"]
     fields: []
   sql_template: |
-    SELECT json_extract(payload, '$.layer_agent.session_id') as session_id,
+    SELECT system,
+           json_extract(payload, '$.layer_agent.session_id') as session_id,
            COUNT(*) as cnt FROM events
     WHERE event_type='sandbox.blocked'
       AND timestamp > ?
-    GROUP BY session_id
+    GROUP BY system, session_id
     HAVING cnt > 2
   description: Agent 尝试访问被土行孙沙箱保护的路径或执行受限命令，达到告警阈值
 
@@ -1956,11 +1980,12 @@
     event_types: ["context.trimmed"]
     fields: []
   sql_template: |
-    SELECT json_extract(payload, '$.layer_agent.session_id') as session_id,
+    SELECT system,
+           json_extract(payload, '$.layer_agent.session_id') as session_id,
            COUNT(*) as cnt FROM events
     WHERE event_type='context.trimmed'
       AND timestamp > ?
-    GROUP BY session_id
+    GROUP BY system, session_id
     HAVING cnt > 5
   description: 土行孙会话上下文超出模型限制导致多次强制截断，建议调整 max_tokens 或启用记忆摘要
 
@@ -2291,6 +2316,7 @@
   layer: model
   severity: P1
   scope: observable
+  per_system: {"opencode":{"confidence_multiplier":0.3}}
   depends:
     event_types: ["llm_invoke", "tool_call"]
     fields: []

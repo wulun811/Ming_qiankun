@@ -5,6 +5,25 @@
 import sys
 
 
+def _check_langchain_version():
+    try:
+        import importlib.metadata as md
+        ver = md.version("langchain-core")
+        print(
+            f"[ming-probe-langchain] langchain-core {ver} detected. "
+            f"Tested: >=1.0. See README for compatibility.",
+            file=sys.stderr,
+        )
+    except md.PackageNotFoundError:
+        print(
+            "[ming-probe-langchain] langchain-core not found in metadata. "
+            "Patch will be attempted on import.",
+            file=sys.stderr,
+        )
+    except Exception:
+        pass
+
+
 class _MingLangChainAutoPatch:
     _patched = False
 
@@ -22,6 +41,7 @@ class _MingLangChainAutoPatch:
         if cls._patched:
             return
         cls._patched = True
+        _check_langchain_version()
         probe = None
         try:
             from ming_probe_langchain.probe_langchain import init_langchain_probe

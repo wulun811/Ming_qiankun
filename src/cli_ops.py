@@ -91,6 +91,75 @@ def cmd_web(args):
             print("server.py not found")
 
 
+def cmd_service(args):
+    service_name = "ming-opencode"
+    unit_dir = Path.home() / ".config" / "systemd" / "user"
+    unit_path = unit_dir / f"{service_name}.service"
+    daemon_path = Path(__file__).parent / "adapters" / "daemon_opencode.py"
+
+    unit_content = f"""[Unit]
+Description=Mingjing OpenCode Daemon Probe
+Documentation=https://github.com/cjg007/mingjing
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory={daemon_path.parent.parent}
+ExecStart={sys.executable} -m adapters.daemon_opencode
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+"""
+
+    if args.action == "install":
+        if not daemon_path.exists():
+            print(f"错误: 找不到守护进程脚本 {daemon_path}")
+            sys.exit(1)
+        unit_dir.mkdir(parents=True, exist_ok=True)
+        unit_path.write_text(unit_content, encoding="utf-8")
+        print(f"  单元文件: {unit_path}")
+        subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
+        subprocess.run(
+            ["systemctl", "--user", "enable", "--now", service_name], check=True
+        )
+        print(f"  服务 {service_name} 已安装并启动")
+
+    elif args.action == "remove":
+        subprocess.run(
+            ["systemctl", "--user", "stop", service_name],
+            capture_output=True,
+        )
+        subprocess.run(
+            ["systemctl", "--user", "disable", service_name],
+            capture_output=True,
+        )
+        if unit_path.exists():
+            unit_path.unlink()
+        subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
+        print(f"  服务 {service_name} 已移除")
+
+    elif args.action == "status":
+        result = subprocess.run(
+            ["systemctl", "--user", "status", service_name],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0 or result.returncode == 3:
+            print(result.stdout)
+            if result.stderr:
+                print(result.stderr)
+        else:
+            print(result.stdout)
+            if result.stderr:
+                print(result.stderr)
+        if not unit_path.exists():
+            print(f"\n  ⚠ 单元文件不存在 ({unit_path})")
+        elif result.returncode != 0:
+            print(f"\n  提示：运行 'ming service install' 安装服务")
+
+
 def cmd_hermes_install(args):
     """一键安装乾坤镜插件到 Hermes Agent"""
     src_dir = Path(__file__).parent.parent / "extensions" / "hermes"

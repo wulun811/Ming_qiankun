@@ -128,7 +128,7 @@ Network-related diagnoses **must** include `layer_network` in evidence, otherwis
 
 `config/remedies.yaml` defines prescription rules, executed by `src/remedy_engine.py`.
 
-> Currently diagnosis-only. Prescription execution requires MCP or human review.
+> Currently diagnosis-only. Prescription execution requires LIT or human review.
 
 ---
 

@@ -14,7 +14,8 @@ from cli_triage import cmd_triage
 from cli_health import cmd_health, cmd_self_check, cmd_status
 from cli_admin import cmd_admin, cmd_exclude, cmd_probe
 from cli_archive import cmd_archive, cmd_verify
-from cli_ops import cmd_skill, cmd_config, cmd_web, cmd_hermes_install
+from cli_ops import cmd_skill, cmd_config, cmd_web, cmd_hermes_install, cmd_service
+from cli_check_adapters import cmd_check_adapters
 
 try:
     from cli_replay import cmd_replay
@@ -287,6 +288,9 @@ def main():
 
     p_report = sub.add_parser("report", help="生成结构化诊断报告")
     p_report.add_argument("--days", type=int, default=1, help="统计天数（默认 1 天）")
+    p_report.add_argument(
+        "--month", type=str, default=None, help="月度报告：格式 YYYY_MM，如 2026_04"
+    )
     p_report.add_argument("--json", action="store_true", help="JSON 输出")
 
     p_replay = sub.add_parser("replay", help="诊断回放时间线（事件→诊断演化）")
@@ -330,6 +334,12 @@ def main():
     p_exclude.add_argument("action", choices=["add", "remove", "list"])
     p_exclude.add_argument("system", nargs="?", help="实例名称")
 
+    p_check = sub.add_parser("check-adapters", help="检查所有适配器状态与版本兼容性")
+    p_check.add_argument("--json", action="store_true", help="JSON 输出")
+
+    p_service = sub.add_parser("service", help="管理 OpenCode 守护进程系统服务")
+    p_service.add_argument("action", choices=["install", "remove", "status"])
+
     p_probe = sub.add_parser("probe", help="探针管理（列出 / 安全卸载）")
     p_probe.add_argument("action", choices=["list", "uninstall"])
     p_probe.add_argument("system", nargs="?", help="实例名称（uninstall 必需）")
@@ -369,6 +379,8 @@ def main():
         cmds["reset"] = cmd_reset
         cmds["reset-status"] = cmd_reset_status
         cmds["instance-list"] = cmd_instance_list
+    cmds["check-adapters"] = cmd_check_adapters
+    cmds["service"] = cmd_service
     cmds["exclude"] = cmd_exclude
     cmds["probe"] = cmd_probe
     cmds[args.command](args)

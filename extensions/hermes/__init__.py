@@ -18,6 +18,8 @@ from ._payload_builders import (
     build_llm_output_event,
 )
 
+_MING_HERMES_MIN_VERSION = "0.1.0"
+
 _probe: ProbeUni | None = None
 _api_starts: dict[str, float] = {}
 _tool_starts: dict[str, float] = {}
@@ -27,8 +29,25 @@ _step_task_id: str | None = None
 _polling_started: bool = False
 
 
+def _check_hermes_version():
+    try:
+        import hermes
+
+        ver = getattr(hermes, "__version__", "unknown")
+        print(
+            f"[mingjing-probe] Hermes Agent {ver} detected. "
+            f"Hook interface is stable across upgrades — no action needed.",
+            file=sys.stderr,
+        )
+    except ImportError:
+        pass
+    except Exception:
+        pass
+
+
 def register(ctx) -> None:
     global _probe, _polling_started
+    _check_hermes_version()
     system_name = os.environ.get("MING_SYSTEM_NAME", "hermes-agent")
     mode = os.environ.get("MING_MODE", "white")
     _probe = ProbeUni(system=system_name, mode=mode)

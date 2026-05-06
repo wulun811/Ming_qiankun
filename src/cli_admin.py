@@ -13,7 +13,9 @@ def _escape_like(s):
 
 
 def _open_db(db_path, readonly=False):
-    conn = sqlite3.connect(f"file:{db_path}?mode=ro" if readonly else str(db_path), uri=readonly)
+    conn = sqlite3.connect(
+        f"file:{db_path}?mode=ro" if readonly else str(db_path), uri=readonly
+    )
     conn.execute("PRAGMA busy_timeout=5000")
     return conn
 
@@ -22,7 +24,12 @@ def _write_audit(hot_dir, event_type, payload):
     hot_dir.mkdir(parents=True, exist_ok=True)
     ts = time.strftime("%Y%m%d_%H%M%S")
     fp = hot_dir / f"{event_type}_{ts}_{os.getpid()}.jsonl"
-    record = {"event_type": event_type, "system": "__admin__", "payload": payload, "timestamp": time.time()}
+    record = {
+        "event_type": event_type,
+        "system": "__admin__",
+        "payload": payload,
+        "timestamp": time.time(),
+    }
     with open(fp, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
     return fp
@@ -31,11 +38,15 @@ def _write_audit(hot_dir, event_type, payload):
 def _delete_diags_across_years(conn, system, row_counter=False):
     """删除/统计所有 diagnoses_{year} + expectations + probe_health 表中指定系统的记录"""
     total = 0
-    dx_tbls = conn.execute("SELECT name FROM sqlite_master WHERE name LIKE 'diagnoses_%'").fetchall()
+    dx_tbls = conn.execute(
+        "SELECT name FROM sqlite_master WHERE name LIKE 'diagnoses_%'"
+    ).fetchall()
     for tbl in [t[0] for t in dx_tbls] + ["expectations", "probe_health"]:
         try:
             if row_counter:
-                total += conn.execute(f"SELECT COUNT(*) FROM {tbl} WHERE system=?", (system,)).fetchone()[0]
+                total += conn.execute(
+                    f"SELECT COUNT(*) FROM {tbl} WHERE system=?", (system,)
+                ).fetchone()[0]
             else:
                 conn.execute(f"DELETE FROM {tbl} WHERE system=?", (system,))
         except sqlite3.OperationalError:
@@ -56,7 +67,8 @@ def cmd_admin(args):
             print("错误: 需要 --confirm 确认删除")
             sys.exit(1)
         if not DB.exists():
-            print("数据库不存在: {}".format(DB)); sys.exit(1)
+            print("数据库不存在: {}".format(DB))
+            sys.exit(1)
 
         conn = _open_db(DB)
         deleted_events = conn.execute(
@@ -71,50 +83,83 @@ def cmd_admin(args):
             ).rowcount
         except sqlite3.OperationalError:
             deleted_dx = 0
-        conn.commit(); conn.close()
+        conn.commit()
+        conn.close()
 
-        fp = _write_audit(HOT, "__admin_action__", {
-            "action": "forget", "session_id": args.session_id,
-            "deleted_events": deleted_events, "deleted_diagnoses": deleted_dx,
-            "operator": "cli", "timestamp": time.time(),
-        })
-        print(f"已删除 session {args.session_id}:\n  events: {deleted_events}\n  diagnoses: {deleted_dx}\n  审计事件已写入: {fp}")
+        fp = _write_audit(
+            HOT,
+            "__admin_action__",
+            {
+                "action": "forget",
+                "session_id": args.session_id,
+                "deleted_events": deleted_events,
+                "deleted_diagnoses": deleted_dx,
+                "operator": "cli",
+                "timestamp": time.time(),
+            },
+        )
+        print(
+            f"已删除 session {args.session_id}:\n  events: {deleted_events}\n  diagnoses: {deleted_dx}\n  审计事件已写入: {fp}"
+        )
 
     elif args.action == "vacuum":
         if not DB.exists():
-            print("数据库不存在: {}".format(DB)); sys.exit(1)
+            print("数据库不存在: {}".format(DB))
+            sys.exit(1)
         conn = _open_db(DB)
         before = DB.stat().st_size
-        conn.execute("VACUUM"); conn.close()
+        conn.execute("VACUUM")
+        conn.close()
         after = DB.stat().st_size
 
-        fp = _write_audit(HOT, "__vacuum__", {
-            "action": "vacuum", "before_size_mb": round(before / 1048576, 2),
-            "after_size_mb": round(after / 1048576, 2),
-            "operator": "cli", "timestamp": time.time(),
-        })
-        print(f"VACUUM 完成:\n  前: {before / 1048576:.2f} MB\n  后: {after / 1048576:.2f} MB\n  释放: {(before - after) / 1048576:.2f} MB\n  审计事件已写入: {fp}")
+        fp = _write_audit(
+            HOT,
+            "__vacuum__",
+            {
+                "action": "vacuum",
+                "before_size_mb": round(before / 1048576, 2),
+                "after_size_mb": round(after / 1048576, 2),
+                "operator": "cli",
+                "timestamp": time.time(),
+            },
+        )
+        print(
+            f"VACUUM 完成:\n  前: {before / 1048576:.2f} MB\n  后: {after / 1048576:.2f} MB\n  释放: {(before - after) / 1048576:.2f} MB\n  审计事件已写入: {fp}"
+        )
 
     elif args.action == "cleanup":
         if not DB.exists():
-            print("数据库不存在: {}".format(DB)); sys.exit(1)
+            print("数据库不存在: {}".format(DB))
+            sys.exit(1)
 
         conn = _open_db(DB)
         cleaned_events = cleaned_dx = 0
         for sys_name in ("unknown", "__admin__"):
-            cleaned_events += conn.execute("DELETE FROM events WHERE system = ?", (sys_name,)).rowcount
+            cleaned_events += conn.execute(
+                "DELETE FROM events WHERE system = ?", (sys_name,)
+            ).rowcount
             try:
                 tbl = f"diagnoses_{time.strftime('%Y')}"
-                cleaned_dx += conn.execute(f"DELETE FROM {tbl} WHERE system = ?", (sys_name,)).rowcount
+                cleaned_dx += conn.execute(
+                    f"DELETE FROM {tbl} WHERE system = ?", (sys_name,)
+                ).rowcount
             except sqlite3.OperationalError:
                 pass
         conn.commit()
-        conn.execute("PRAGMA optimize"); conn.close()
+        conn.execute("PRAGMA optimize")
+        conn.close()
 
-        _write_audit(HOT, "__cleanup__", {
-            "action": "cleanup", "cleaned_events": cleaned_events,
-            "cleaned_diagnoses": cleaned_dx, "operator": "cli", "timestamp": time.time(),
-        })
+        _write_audit(
+            HOT,
+            "__cleanup__",
+            {
+                "action": "cleanup",
+                "cleaned_events": cleaned_events,
+                "cleaned_diagnoses": cleaned_dx,
+                "operator": "cli",
+                "timestamp": time.time(),
+            },
+        )
         print(f"清理完成:\n  events: {cleaned_events}\n  diagnoses: {cleaned_dx}")
 
 
@@ -123,24 +168,38 @@ def cmd_exclude(args):
     excluded = _load_excluded()
 
     if args.action == "list":
-        print("已排除的实例:\n  " + "\n  ".join(sorted(excluded)) if excluded else "没有排除任何实例")
+        print(
+            "已排除的实例:\n  " + "\n  ".join(sorted(excluded))
+            if excluded
+            else "没有排除任何实例"
+        )
         return
 
     if not args.system:
-        print("错误: 需要指定实例名称"); sys.exit(1)
+        print("错误: 需要指定实例名称")
+        sys.exit(1)
 
     if args.action == "add":
         if args.system in excluded:
-            print(f"实例 {args.system} 已在排除列表中"); return
+            print(f"实例 {args.system} 已在排除列表中")
+            return
         excluded.add(args.system)
         _save_excluded(excluded)
         print(f"已停止观察 {args.system}\n当前排除列表: {', '.join(sorted(excluded))}")
     elif args.action == "remove":
         if args.system not in excluded:
-            print(f"实例 {args.system} 不在排除列表中"); return
+            print(f"实例 {args.system} 不在排除列表中")
+            return
         excluded.discard(args.system)
         _save_excluded(excluded)
-        print(f"已恢复观察 {args.system}\n" + (f"当前排除列表: {', '.join(sorted(excluded))}" if excluded else "排除列表已清空"))
+        print(
+            f"已恢复观察 {args.system}\n"
+            + (
+                f"当前排除列表: {', '.join(sorted(excluded))}"
+                if excluded
+                else "排除列表已清空"
+            )
+        )
 
 
 def cmd_probe(args):
@@ -154,14 +213,16 @@ def cmd_probe(args):
         _cmd_probe_list(DB)
     elif args.action == "uninstall":
         if not args.system:
-            print("错误: 卸载需要指定探针名称"); sys.exit(1)
+            print("错误: 卸载需要指定探针名称")
+            sys.exit(1)
         _cmd_probe_uninstall(DB, HOT, COLD, PAUSED, args)
 
 
 def _cmd_probe_list(DB):
     """列出所有已注册的探针及状态"""
     if not DB.exists():
-        print("暂无已注册的探针"); return
+        print("暂无已注册的探针")
+        return
 
     conn = _open_db(DB, readonly=True)
     conn.row_factory = sqlite3.Row
@@ -173,17 +234,21 @@ def _cmd_probe_list(DB):
                 "FROM system_pid sp ORDER BY last_seen DESC"
             ).fetchall()
         except sqlite3.OperationalError:
-            print("暂无已注册的探针"); return
+            print("暂无已注册的探针")
+            return
 
         if not rows:
-            print("暂无已注册的探针"); return
+            print("暂无已注册的探针")
+            return
 
         now = time.time()
         pd = Path.home() / ".ming" / ".paused"
         paused = {f.name for f in pd.iterdir() if f.is_file()} if pd.exists() else set()
         excluded = _load_excluded()
 
-        print(f"\n  {'探针名称':<18} {'最后心跳':<20} {'模式':<8} {'事件数':<8} {'状态'}")
+        print(
+            f"\n  {'探针名称':<18} {'最后心跳':<20} {'模式':<8} {'事件数':<8} {'状态'}"
+        )
         print("  " + "-" * 78)
         for r in rows:
             ago = now - r["last_seen"]
@@ -197,8 +262,10 @@ def _cmd_probe_list(DB):
                 status = f"离线 ({int(ago / 86400)}天前)"
             if r["system"] in paused or r["system"] in excluded:
                 status += " [已暂停]"
-            print(f"  {r['system']:<18} {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(r['last_seen'])):<20} "
-                  f"{r['mode']:<8} {r['event_count']:<8} {status}")
+            print(
+                f"  {r['system']:<18} {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(r['last_seen'])):<20} "
+                f"{r['mode']:<8} {r['event_count']:<8} {status}"
+            )
     finally:
         conn.close()
 
@@ -230,53 +297,64 @@ def _cmd_probe_uninstall(DB, HOT, COLD, PAUSED, args):
     if DB.exists():
         conn = _open_db(DB)
         try:
-            row = conn.execute("SELECT last_seen FROM system_pid WHERE system=?", (system,)).fetchone()
+            row = conn.execute(
+                "SELECT last_seen FROM system_pid WHERE system=?", (system,)
+            ).fetchone()
             if row:
                 last_seen = row[0]
-            event_count = conn.execute("SELECT COUNT(*) FROM events WHERE system=?", (system,)).fetchone()[0]
+            event_count = conn.execute(
+                "SELECT COUNT(*) FROM events WHERE system=?", (system,)
+            ).fetchone()[0]
             diagnosis_count = _delete_diags_across_years(conn, system, row_counter=True)
         finally:
             conn.close()
 
     print(f"\n准备卸载探针: {system}")
-    print(f"  事件: {event_count}  诊断: {diagnosis_count}  热轨: {len(hot_files)}  冷轨: {len(cold_files)}")
+    print(
+        f"  事件: {event_count}  诊断: {diagnosis_count}  热轨: {len(hot_files)}  冷轨: {len(cold_files)}"
+    )
     if last_seen:
         ago = int(time.time() - last_seen)
-        print(f"  最后心跳: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(last_seen))}"
-              f"{'  ⚠ 可能仍在运行' if ago < 60 else ''}")
+        print(
+            f"  最后心跳: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(last_seen))}"
+            f"{'  ⚠ 可能仍在运行' if ago < 60 else ''}"
+        )
     elif event_count == 0:
         print("  数据库无记录，仅清理文件残留")
 
     if dry_run:
-        print("\n[dry-run] 未执行变更"); return
+        print("\n[dry-run] 未执行变更")
+        return
 
     if not force:
-        action_desc = ("备份 → 停止观察 → 清库 → 清文件 → VACUUM" if not keep_data
-                       else "停止观察 + 清理热轨文件（保留记录）")
-        if input(f"\n将执行: {action_desc}\n\n确认卸载？[y/N] ").strip().lower() not in ("y", "yes"):
-            print("已取消"); return
+        action_desc = (
+            "备份 → 停止观察 → 清库 → 清文件 → VACUUM"
+            if not keep_data
+            else "停止观察 + 清理热轨文件（保留记录）"
+        )
+        if input(
+            f"\n将执行: {action_desc}\n\n确认卸载？[y/N] "
+        ).strip().lower() not in ("y", "yes"):
+            print("已取消")
+            return
 
     deleted_events = deleted_pid = deleted_files = 0
 
     if not keep_data and DB.exists() and event_count > 0:
         conn = _open_db(DB)
         try:
-            conn.row_factory = sqlite3.Row
-            rows = conn.execute("SELECT * FROM events WHERE system=? ORDER BY timestamp", (system,)).fetchall()
-            if rows:
-                COLD.mkdir(parents=True, exist_ok=True)
-                backup_file = COLD / f"{system}_backup_{time.strftime('%Y%m%d_%H%M%S')}.jsonl"
-                with open(backup_file, "w", encoding="utf-8") as f:
-                    for r in rows:
-                        f.write(json.dumps(dict(r), ensure_ascii=False, default=str) + "\n")
-
-            deleted_events = conn.execute("DELETE FROM events WHERE system=?", (system,)).rowcount
-            deleted_pid = conn.execute("DELETE FROM system_pid WHERE system=?", (system,)).rowcount
+            deleted_events = conn.execute(
+                "DELETE FROM events WHERE system=?", (system,)
+            ).rowcount
+            deleted_pid = conn.execute(
+                "DELETE FROM system_pid WHERE system=?", (system,)
+            ).rowcount
             _delete_diags_across_years(conn, system)
             conn.commit()
             conn.execute("VACUUM")
         except (sqlite3.OperationalError, OSError) as e:
-            print(f"操作失败: {e}"); return
+            print(f"操作失败: {e}")
+            return
         finally:
             conn.close()
 
@@ -288,22 +366,32 @@ def _cmd_probe_uninstall(DB, HOT, COLD, PAUSED, args):
 
     for fp in hot_files:
         try:
-            fp.unlink(); deleted_files += 1
+            fp.unlink()
+            deleted_files += 1
         except OSError:
             pass
     if not keep_data:
         for fp in cold_files:
             try:
-                fp.unlink(); deleted_files += 1
+                fp.unlink()
+                deleted_files += 1
             except OSError:
                 pass
 
-    _write_audit(HOT, "__probe_uninstall__", {
-        "action": "uninstall", "target_system": system,
-        "deleted_events": deleted_events, "deleted_pid": deleted_pid,
-        "deleted_files": deleted_files, "keep_data": keep_data,
-        "operator": "cli", "timestamp": time.time(),
-    })
+    _write_audit(
+        HOT,
+        "__probe_uninstall__",
+        {
+            "action": "uninstall",
+            "target_system": system,
+            "deleted_events": deleted_events,
+            "deleted_pid": deleted_pid,
+            "deleted_files": deleted_files,
+            "keep_data": keep_data,
+            "operator": "cli",
+            "timestamp": time.time(),
+        },
+    )
 
     if keep_data:
         print(f"\n已停止观察 {system}，数据已保留")
