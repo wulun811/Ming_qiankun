@@ -49,15 +49,18 @@ git clone https://github.com/wulun811/Ming_qiankun.git
 cd Ming_qiankun
 ```
 
-### 2. 运行（零依赖）
+### 2. 启动服务（零依赖）
+
+ > **ming CLI** 面向诊断查询（`ming dx list`、`ming health` 等），
+ > 服务管理（启动/停止归档器）使用 `python3 -m src.ming`。
 
 ```bash
 # Standalone 模式 — 纯 Python 标准库，零第三方依赖
-# PyPI 安装用户：
-MING_MODE=standalone ming start
+# 启动归档器守护进程（PyPI / 源码通用）：
+python3 -m src.ming start
 
-# 源码用户：
-MING_MODE=standalone python src/ming.py start
+# 启动 Web 面板（可选）：
+ming web serve
 ```
 
 ### 3. 发射测试事件
@@ -85,7 +88,8 @@ print('Event emitted!')
 
 ### 4. 查看诊断
 
-> **两个入口**：`ming` CLI 负责服务管理（启动/停止归档器和 Web）和查询诊断。
+> **两个入口**：`ming` CLI 面向诊断查询（`ming dx list`、`ming health` 等），
+> 服务管理（启动/停止归档器）使用 `python3 -m src.ming`。
 
 ```bash
 # 查看当前系统诊断
@@ -108,9 +112,9 @@ ming web serve --port 18088
 **局域网访问**：
 | 场景 | 命令 | 浏览器地址 |
 |------|------|-----------|
-| 本机仅 | `python src/plugins/web_dashboard/server.py --daemon --port 18088` | `http://localhost:18088` |
-| 局域网开放 | `python src/plugins/web_dashboard/server.py --daemon --host 0.0.0.0 --port 18088 --no-browser` | `http://<本机IP>:18088` |
-| 加认证 | `python src/plugins/web_dashboard/server.py --daemon --host 0.0.0.0 --port 18088 --no-browser --token your-secret` | `http://<本机IP>:18088/?token=your-secret` |
+| 本机仅 | `ming web serve` | `http://localhost:18088` |
+| 局域网开放 | `ming web serve --host 0.0.0.0 --port 18088 --no-browser` | `http://<本机IP>:18088` |
+| 加认证 | `ming web serve --host 0.0.0.0 --port 18088 --no-browser --token your-secret` | `http://<本机IP>:18088/?token=your-secret` |
 
 ---
 
@@ -314,7 +318,7 @@ docker run -d --name ming -p 18088:18088 ming
 
 ```bash
 # Standalone（默认）
-ming start
+python3 -m src.ming start
 
 # Cluster
 MING_MODE=cluster \
@@ -322,7 +326,7 @@ MING_MODE=cluster \
   WQ_DB_USER=root \
   WQ_DB_PASSWORD=secret \
   WQ_DB_NAME=ming \
-  ming start
+  python3 -m src.ming start
 ```
 
 ---
@@ -341,17 +345,17 @@ Standalone 模式下，归档器默认处理 **1000 事件/秒**。通过环境�
 
 ```bash
 # 场景 1: 默认（大多数用户，1000 events/s）
-MING_MODE=standalone ming start
+MING_MODE=standalone python3 -m src.ming start
 
 # 场景 2: 高吞吐（写入密集，~5000 events/s）
 WQ_ARCHIVER_BATCH_SIZE=5000 \
 WQ_ARCHIVER_FLUSH_SEC=0.5 \
-MING_MODE=standalone ming start
+MING_MODE=standalone python3 -m src.ming start
 
 # 场景 3: 省电模式（低负载设备，~200 events/s）
 WQ_ARCHIVER_BATCH_SIZE=200 \
 WQ_ARCHIVER_FLUSH_SEC=5.0 \
-MING_MODE=standalone ming start
+MING_MODE=standalone python3 -m src.ming start
 ```
 
 > **提示**：调整参数后需重启归档器生效。前端 Config 面板可查看当前配置值（只读）。

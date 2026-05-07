@@ -201,6 +201,12 @@ def diagnose():
         (OUT / ".plugin_heartbeat").write_text(str(now))
         return
 
+    diseases = load_diseases_yaml()
+    if diseases is None:
+        conn.close()
+        (OUT / ".plugin_heartbeat").write_text(str(now))
+        return
+
     always_on_ids = {d.get("id", "") for d in diseases if d.get("always_on") is True}
 
     def is_rule_ready(rule_id: str) -> bool:
@@ -215,12 +221,6 @@ def diagnose():
         if triage is None:
             return 1.0
         return triage.get(rule_id, {}).get("confidence_multiplier", 1.0)
-
-    diseases = load_diseases_yaml()
-    if diseases is None:
-        conn.close()
-        (OUT / ".plugin_heartbeat").write_text(str(now))
-        return
 
     env_profile = _load_env_profile(conn)
 

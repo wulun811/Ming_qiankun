@@ -1,0 +1,17 @@
+[Unit]
+Description=乾坤镜 Web Dashboard
+Documentation=https://github.com/cjg007/mingjing
+After=ming-archiver.service
+Wants=ming-archiver.service
+
+[Service]
+Type=simple
+# PyPI 安装用户（默认，本机仅访问）：
+ExecStart=ming web serve
+# 局域网开放（取消注释）：
+# ExecStart=python3 -m src.plugins.web_dashboard.server --daemon --host 0.0.0.0 --port 18088 --no-browser
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

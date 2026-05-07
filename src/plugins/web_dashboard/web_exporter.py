@@ -29,6 +29,28 @@ def _get_excluded():
     return systems
 
 
+def _normalize_ts(ts):
+    """处理 timestamp 单位混用（历史数据可能为毫秒）"""
+    if ts is None or ts <= 0:
+        return 0
+    now_sec = time.time()
+    if ts > now_sec * 100:
+        return ts / 1000
+    return ts
+
+
+FIRST_SEEN_ALIASES = ("first_seen", "min_ts", "start_time", "first_event")
+LAST_SEEN_ALIASES = (
+    "last_event",
+    "last_seen",
+    "maxts",
+    "last_heartbeat",
+    "last_update",
+    "last_retrieve",
+    "timestamp",
+)
+
+
 KNOWN_PROBES = {"tusunsun", "langchain", "openclaw", "mingjing", "opencode"}
 
 
@@ -696,6 +718,17 @@ def export():
     if "mingjing" not in systems:
         systems.append("mingjing")
 
+    # === 第 2 层回退：批量查询所有系统的事件时间范围（全量历史）===
+    sys_time_range = {}
+    try:
+        _rows = conn.execute(
+            "SELECT system, MIN(timestamp), MAX(timestamp) FROM events GROUP BY system"
+        ).fetchall()
+        for _r in _rows:
+            sys_time_range[_r[0]] = (_normalize_ts(_r[1]), _normalize_ts(_r[2]))
+    except sqlite3.OperationalError:
+        pass
+
     # === 诊断病历 ===
     diagnoses = []
     try:
@@ -745,27 +778,53 @@ def export():
                 except Exception:
                     pass
 
-            # 计算 occurred_at（证据中最早的事件时间）
+            # === 3 层时间回退 ===
+            # 第 1 层：从证据中提取时间别名（精确）
             occurred_at = None
+            occurred_at_last = None
             for ev in evidence_list:
-                if isinstance(ev, dict):
-                    ev_time = ev.get("key_fields", {}).get("timestamp") or ev.get(
-                        "timestamp"
-                    )
-                    if ev_time:
+                if not isinstance(ev, dict):
+                    continue
+                kf = ev.get("key_fields", {})
+                for alias in FIRST_SEEN_ALIASES:
+                    val = kf.get(alias)
+                    if val is not None:
                         try:
-                            ev_time = float(ev_time)
-                            if occurred_at is None or ev_time < occurred_at:
-                                occurred_at = ev_time
+                            val = _normalize_ts(float(val))
+                            if occurred_at is None or val < occurred_at:
+                                occurred_at = val
                         except (ValueError, TypeError):
                             pass
+                        break
+                for alias in LAST_SEEN_ALIASES:
+                    val = kf.get(alias)
+                    if val is not None:
+                        try:
+                            val = _normalize_ts(float(val))
+                            if occurred_at_last is None or val > occurred_at_last:
+                                occurred_at_last = val
+                        except (ValueError, TypeError):
+                            pass
+                        break
+
+            # 第 2 层：系统级事件时间范围回退（近似，全量历史）
+            sys_ts = sys_time_range.get(d.get("system"))
+            if occurred_at is None and sys_ts:
+                occurred_at = sys_ts[0]
+            if occurred_at_last is None and sys_ts:
+                occurred_at_last = sys_ts[1]
+
+            # 第 3 层：created_at 兜底
+            if occurred_at is None:
+                occurred_at = d.get("created_at", 0)
 
             d["detail"] = {
                 "rule": inference_raw or "",
                 "evidence": evidence_list,
                 "model": model,
             }
-            d["occurred_at"] = occurred_at or d.get("created_at")
+            d["occurred_at"] = occurred_at
+            d["occurred_at_last"] = occurred_at_last or occurred_at
             diagnoses.append(d)
     except sqlite3.OperationalError:
         pass
@@ -1679,8 +1738,8 @@ def _build_instance_cards(
             g_list.sort(key=lambda x: x.get("created_at", 0), reverse=True)
             latest = dict(g_list[0])
             latest["occurrence_count"] = len(g_list)
-            latest["first_seen"] = min(dx.get("created_at", 0) for dx in g_list)
-            latest["last_seen"] = latest.get("created_at")
+            latest["first_seen"] = min(dx.get("occurred_at", 0) for dx in g_list)
+            latest["last_seen"] = max(dx.get("occurred_at_last", 0) for dx in g_list)
             latest["duration_seconds"] = max(0, now - latest["first_seen"])
             latest["merged_from"] = len(g_list)
 

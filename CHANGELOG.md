@@ -1,9 +1,32 @@
 # Changelog
 
+## [v0.11.12.post4] — 2026-05-07
+
+### Fixed
+- `web_exporter.py`: 诊断时间戳显示 bug（前端显示"3m 前"，实际事件 7.8 天前）
+  - 3 层时间回退链：证据别名 → 系统事件全量历史 → created_at 兜底
+  - 新增 `_normalize_ts()` 处理 timestamp 毫秒/秒单位混用
+  - 新增 `FIRST_SEEN_ALIASES` / `LAST_SEEN_ALIASES` 覆盖 7 个规则的已有时间别名
+  - 批量查询 events 表获取每个系统的 MIN/MAX 时间范围（全量历史，无 24h 限制）
+  - `last_seen` 改用 `occurred_at_last`（取 MAX 而非 MIN）
+
 ## [v0.11.12.post1] — 2026-05-07
 
 ### Added
 - `src/adapters/daemon_opencode.py` back to public release package
+- `contrib/systemd/` systemd unit templates (ming-archiver, ming-web, ming-opencode)
+- `updocs/` included in PyPI wheel (was missing from v0.11.12)
+
+### Changed
+- CLI docs: `ming start` → `python3 -m src.ming start` across all docs
+- `updocs/06_运维手册.md`: systemd deployment section rewritten with templates
+- `pyproject.toml`: packages includes `"updocs"` for wheel packaging
+
+### Fixed
+- `archiver.py`: `start_daemon()` self-registers PID in `system_pid` table (Tier 2 fallback)
+- `tests/test_t01_to_t11.py`: add `src/` to `sys.path` for import resolution
+- `README.md` LAN access table: old `server.py` paths → `ming web serve`
+- All docs consistent: `python src/cli.py` → `ming`, version badges updated
 
 ## [v0.11.12] — 2026-05-07
 

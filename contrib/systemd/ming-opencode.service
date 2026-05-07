@@ -1,0 +1,14 @@
+[Unit]
+Description=乾坤镜 OpenCode Daemon Probe
+Documentation=https://github.com/cjg007/mingjing
+After=network.target
+
+[Service]
+Type=simple
+# 探针守护进程 — 自动随 OpenCode 启停
+ExecStart=python3 -m src.adapters.daemon_opencode
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

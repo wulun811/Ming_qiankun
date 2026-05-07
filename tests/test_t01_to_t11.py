@@ -17,9 +17,10 @@ import unittest
 from contextlib import contextmanager
 from pathlib import Path
 
-# 添加项目路径
+# 添加项目路径和 src 目录（archiver.py 使用裸 from archiver_schema import）
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from src.probe_uni import ProbeUni
 from src.archiver import Archiver

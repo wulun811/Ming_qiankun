@@ -633,6 +633,16 @@ class Archiver:
         self._alive = True
         self._consecutive_errors = 0
         self._max_consecutive_errors = 100
+        try:
+            conn = self._open_db()
+            conn.execute(
+                "INSERT OR REPLACE INTO system_pid (system, pid, registered_at, last_seen, mode) VALUES (?, ?, ?, ?, ?)",
+                ("mingjing", os.getpid(), time.time(), time.time(), "white"),
+            )
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
 
         _libc = ctypes.CDLL("libc.so.6")
 

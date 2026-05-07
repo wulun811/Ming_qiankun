@@ -1,0 +1,19 @@
+[Unit]
+Description=乾坤镜 Archiver — 事件归档守护进程
+Documentation=https://github.com/cjg007/mingjing
+After=network.target
+
+[Service]
+Type=simple
+# PyPI 安装用户（默认）：
+ExecStart=python3 -m src.archiver_daemon
+# 源码用户（取消注释，修改路径）：
+# ExecStart=python3 /path/to/Ming_qiankun/src/archiver_daemon.py
+Restart=always
+RestartSec=10
+# 重定向日志到文件（可选）：
+# StandardOutput=append:%h/.ming/archiver.log
+# StandardError=append:%h/.ming/archiver.log
+
+[Install]
+WantedBy=default.target

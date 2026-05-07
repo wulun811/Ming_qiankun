@@ -1,4 +1,4 @@
-# 乾坤镜 Mingjing v0.11.10
+# 乾坤镜 Mingjing v0.11.12.post1
 
 > **AI Agent 诊断折射阵列** — 零侵入观测 LLM 调用、工具执行、记忆检索与 Agent 编排  
 > **乾坤镜是 LIT 1.4 的轻量折射阵列，不是独立诊断中台。**
@@ -37,10 +37,14 @@ git clone https://github.com/wulun811/Ming_qiankun.git
 cd Ming_qiankun
 ```
 
-### 2. 运行（零依赖）
+### 2. 启动服务（零依赖）
 
 ```bash
-MING_MODE=standalone python src/ming.py start
+# PyPI 安装用户：
+python3 -m src.ming start
+
+# 源码用户：
+MING_MODE=standalone python3 src/ming.py start
 ```
 
 ### 3. 发射测试事件
@@ -63,18 +67,21 @@ print('Event emitted!')
 
 ### 4. 查看诊断
 
-> **两个入口**：`src/ming.py` 负责服务管理（启动/停止），`src/cli.py` 负责查询诊断。运行 `python src/cli.py --help` 查看所有命令。
+> **两个入口**：`python3 -m src.ming` 负责服务管理（启动/停止），`ming` CLI 负责查询诊断。运行 `ming --help` 查看所有命令。
 
 ```bash
-python src/cli.py dx list
+ming dx list
 ```
 
 ### 5. Web 目镜（可选）
 
 ```bash
-python src/ming.py web serve        # 启动
+# PyPI 安装用户：
+ming web serve                    # 启动
+# 源码用户：
+python3 src/ming.py web serve     # 启动
 # 浏览器访问 http://localhost:18088
-python src/ming.py web stop         # 随时关闭，不影响核心
+python3 src/ming.py web stop      # 随时关闭，不影响核心
 ```
 
 ---
@@ -117,4 +124,4 @@ python src/ming.py web stop         # 随时关闭，不影响核心
 
 ---
 
-**乾坤镜 v0.11.10 — 纯数据底座 + 插件执行器 + 三层解耦。底座轻量，生态无上限。**
+**乾坤镜 v0.11.12.post1 — 纯数据底座 + 插件执行器 + 三层解耦。底座轻量，生态无上限。**
