@@ -308,17 +308,14 @@ def cmd_report(args):
         print(f"╚══════════════════════════════════════════════════════════╝")
         return
 
-    KNOWN_PROBES = {"tusunsun", "langchain", "openclaw", "mingjing", "opencode"}
-
-    def _is_known(s):
-        return any(s == name or s.startswith(name + "_") for name in KNOWN_PROBES)
+    from probes import is_known_probe
 
     # === 按系统+故障ID聚合（合并同fault_id） ===
     by_system = {}
     _SKIP_SYSTEMS = {"__host__", "unknown", "all"}
     for d in diagnoses:
         sys_name = d.get("system", "unknown")
-        if sys_name in _SKIP_SYSTEMS or not _is_known(sys_name):
+        if sys_name in _SKIP_SYSTEMS or not is_known_probe(sys_name):
             continue
         fid = d.get("fault_id", "")
         if sys_name not in by_system:
@@ -399,7 +396,7 @@ def cmd_report(args):
                 ).fetchall()
                 if r[0] not in _SKIP_SYSTEMS
                 and r[0] in probe_systems
-                and _is_known(r[0])
+                and is_known_probe(r[0])
             ]
             for s in all_systems:
                 if s not in cards:

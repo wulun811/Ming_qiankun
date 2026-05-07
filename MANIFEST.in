@@ -6,11 +6,13 @@ graft config
 graft filters
 graft extensions
 graft updocs
-prune __pycache__
 prune updocs/image
-recursive-exclude *.pyc
-recursive-exclude *.pyo
 prune .git
+prune extensions/langchain/dist
+prune extensions/langchain/ming_probe_langchain.egg-info
+global-exclude __pycache__
+global-exclude *.pyc
+global-exclude *.pyo
 
 # Security: exclude runtime data from packaging
 recursive-exclude src/plugins/web_dashboard data.json

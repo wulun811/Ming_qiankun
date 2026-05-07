@@ -51,11 +51,7 @@ LAST_SEEN_ALIASES = (
 )
 
 
-KNOWN_PROBES = {"tusunsun", "langchain", "openclaw", "mingjing", "opencode"}
-
-
-def _is_known(s):
-    return any(s == name or s.startswith(name + "_") for name in KNOWN_PROBES)
+from probes import is_known_probe
 
 
 DB = Path.home() / ".ming" / "ming.db"
@@ -711,7 +707,7 @@ def export():
             for r in conn.execute(
                 "SELECT DISTINCT system FROM events WHERE system NOT IN ('__host__', 'unknown', 'all') ORDER BY system"
             ).fetchall()
-            if _is_known(r[0])
+            if is_known_probe(r[0])
         ]
     except sqlite3.OperationalError:
         pass

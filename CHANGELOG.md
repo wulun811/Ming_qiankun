@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.11.12.post5] — 2026-05-07
+
+### Fixed
+- 发布包完整性：4 个 HARD BREAK（被排除模块被未排除代码引用）
+  - `sync_to_release.py`: 移除 backfill_opencode, probe_langchain_callback, credential_vault, cli_disease 的排除
+  - `config_loader.py`: push.enabled 默认改为 False（避免 ming_push 不存在时报错）
+  - `probe_opencode_wrapper.py`: emit() 添加暂停检查（~/.ming/.paused/opencode）
+
+### Added
+- `scripts/verify_imports.py`: 导入完整性验证工具（发布前检查）
+
 ## [v0.11.12.post4] — 2026-05-07
 
 ### Fixed

@@ -51,6 +51,11 @@ _drop_count = 0
 
 
 def emit(event_type, payload, ts=None):
+    # 暂停检查：~/.ming/.paused/{system} 存在则静默
+    paused_file = Path.home() / ".ming" / ".paused" / "opencode"
+    if paused_file.exists():
+        return False
+
     global _emit_count, _drop_count
     HOT_DIR.mkdir(parents=True, exist_ok=True)
     if ts is not None and ts > 1e12:

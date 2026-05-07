@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mingjing"
-version = "0.11.12.post4"
+version = "0.11.12.post7"
 description = "乾坤镜 — AI Agent 诊断折射阵列"
 license = "BUSL-1.1"
 license-files = ["LICENSE"]
@@ -15,7 +15,12 @@ requires-python = ">=3.10"
 ming = "src.cli:main"
 
 [tool.setuptools]
-packages = ["src", "src.adapters", "src.plugins", "src.plugins.web_dashboard", "src.plugins.lit_lite", "src.migrations", "updocs", "config", "filters", "contrib", "contrib.systemd"]
+packages = [
+    "src", "src.adapters", "src.plugins", "src.plugins.web_dashboard",
+    "src.plugins.lit_lite", "src.migrations",
+    "updocs", "config", "filters", "contrib", "contrib.systemd",
+    "extensions", "extensions.hermes",
+]
 include-package-data = true
 
 [tool.setuptools.package-data]
@@ -26,3 +31,5 @@ src = ["*.js", "*.go", "*.yaml", "*.html"]
 config = ["*.yaml", "*.json"]
 filters = ["*.yaml"]
 "contrib.systemd" = ["*.service"]
+"extensions" = ["*.yaml", "*.json", "*.js", "*.md"]
+"extensions.hermes" = ["*.yaml", "*.md"]

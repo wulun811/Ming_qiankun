@@ -1,4 +1,4 @@
-# probe_langchain_callback.py —— v0.11.9 乾坤镜 LangChain Callback Handler
+# probe_langchain_callback.py —— v0.11.9m 乾坤镜 LangChain Callback Handler
 # 职责：通过 LangChain 官方 BaseCallbackHandler 捕获 monkey-patch 覆盖不到的事件
 #   - stream/batch/abatch（不走 invoke 入口）
 #   - 对每一个 ChatModel 调用的 prompts/messages
@@ -23,7 +23,10 @@ def _is_new_run(run_id):
         return True
 
 
-from langchain_core.callbacks.base import BaseCallbackHandler
+try:
+    from langchain_core.callbacks.base import BaseCallbackHandler
+except ImportError:
+    BaseCallbackHandler = object
 
 
 class MingCallbackHandler(BaseCallbackHandler):

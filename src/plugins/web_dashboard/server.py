@@ -10,11 +10,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
-KNOWN_PROBES = {"tusunsun", "langchain", "openclaw", "mingjing", "opencode"}
-
-
-def _is_known(s):
-    return any(s == name or s.startswith(name + "_") for name in KNOWN_PROBES)
+from probes import is_known_probe
 
 
 WEB_DIR = Path.home() / ".ming" / "web"
@@ -819,7 +815,7 @@ class MingjingHandler(http.server.BaseHTTPRequestHandler):
         bridge = self._bridge()
         sql = "SELECT system, COUNT(*) as cnt FROM events GROUP BY system ORDER BY cnt DESC LIMIT ?"
         rows = bridge._conn.execute(sql, (limit,)).fetchall()
-        return [{"system": r[0], "count": r[1]} for r in rows if _is_known(r[0])]
+        return [{"system": r[0], "count": r[1]} for r in rows if is_known_probe(r[0])]
 
     def _send_json(self, status_code, data):
         self.send_response(status_code)

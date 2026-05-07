@@ -18,7 +18,7 @@ DEFAULTS = {
         "export_limit": 100,
     },
     "privacy": {"default_mode": "black", "retention": {"by_system": {}}},
-    "push": {"enabled": True, "host": "localhost", "port": 9002, "path": "/ming/push"},
+    "push": {"enabled": False, "host": "localhost", "port": 9002, "path": "/ming/push"},
     "logging": {"level": "info", "file": "~/.ming/ming.log"},
 }
 
