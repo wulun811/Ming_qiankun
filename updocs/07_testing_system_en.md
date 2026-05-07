@@ -1,6 +1,6 @@
 # 07 Testing System
 
-> **413 passed, 0 failed, 0 skipped** (complete test suite, ~35 seconds)
+> **440 passed, 0 failed, 2 skipped** (complete test suite, ~155 seconds)
 
 ---
 
@@ -110,12 +110,17 @@ python scripts/bench_continuity.py --rate 5000 --duration 300  # 5000/s, 5min
 
 ## VI. CI Results
 
-**413 passed, 0 failed, 0 skipped** (v0.11.9m)
+**440 passed, 0 failed, 2 skipped** (v0.11.10)
 
 - 19 new probe management tests
 - Covers 22+ modules
 - Includes stress tests at 500 events/s for 3s
 
+> **Skipped**: 2 tests from `test_cluster_e2e.py` require a real MySQL + `pymysql` cursor;
+> incompatible with the current SQLite mock test environment. Cluster archiver batch writes
+> + Bridge fallback pass (3 tests tested); reflector diagnosis is covered by `test_disease_coverage.py`.
+> For full Cluster e2e: set `MING_MYSQL_URL`.
+
 ---
 
-**Testing philosophy: Three-tier (smoke/full/perf), 413 full tests, 150K event stress test.**
+**Testing philosophy: Three-tier (smoke/full/perf), 440 full tests, 150K event stress test.**

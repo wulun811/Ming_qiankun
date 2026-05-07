@@ -101,7 +101,7 @@
            MAX(json_extract(payload, '$.fd_count')) as max_fd
     FROM events WHERE event_type='platform_snapshot' AND timestamp > ?
     AND system IN ('__host__', 'openclaw') AND json_extract(payload, '$.fd_count') > 0
-    GROUP BY system HAVING max_fd > min_fd * 2 AND max_fd > 500
+    GROUP BY system HAVING max_fd > min_fd * 2 AND max_fd > 200
   description: 文件描述符数量持续增长，可能未正确关闭文件/连接
 
 - id: SYS-006
@@ -696,14 +696,14 @@
   severity: P1
   scope: observable
   applicable: all
-  per_system: {"opencode":{"confidence_multiplier":0.2}}
+  per_system: {"opencode":{"confidence_multiplier":0.5}}
   depends:
     event_types: ["llm_invoke"]
     fields: ["layer_llm.input_tokens", "layer_llm.output_tokens"]
   sql_template: |
     SELECT system,
            SUM(json_extract(payload, '$.layer_llm.input_tokens') +
-               json_extract(payload, '$.layer_llm.output_tokens')) as tokens,
+                json_extract(payload, '$.layer_llm.output_tokens')) as tokens,
            COUNT(*) as cnt
     FROM events WHERE event_type='llm_invoke' AND timestamp > ?
     GROUP BY system HAVING tokens > 500000
@@ -1204,7 +1204,7 @@
   sql_template: |
     SELECT system, json_extract(payload, '$.error_type') as error_type, COUNT(*) as cnt FROM events
     WHERE event_type='error' AND timestamp > ?
-    GROUP BY system, json_extract(payload, '$.error_type') HAVING cnt > 10
+    GROUP BY system, json_extract(payload, '$.error_type') HAVING cnt > 5
   description: 同一错误类型频繁出现，可能引发级联崩盘
 
 - id: AGT-063
@@ -1565,7 +1565,7 @@
       AND e2.timestamp > ?
     )
     ORDER BY emit_rate ASC LIMIT 5
-  description: 探针 emit 成功率突降超过 50%
+  description: 探针 emit 成功率突降（注意：emit_success_count_1m 在不同探针实现中语义不同 — OpenClaw/opencode 为真实吞吐计数，参考探针为瞬时缓冲区深度，以生产探针 OpenClaw 为准）
 
 # ============================================================
 # 八、数据质量（5 个）
@@ -1583,8 +1583,8 @@
   sql_template: |
     SELECT system, json_extract(payload, '$.error_type') as error_type, COUNT(*) as cnt FROM events
     WHERE event_type='error' AND timestamp > ?
-    GROUP BY system, json_extract(payload, '$.error_type') HAVING cnt > 10
-  description: 同一错误类型 5 分钟内出现超过 10 次
+    GROUP BY system, json_extract(payload, '$.error_type') HAVING cnt > 5
+  description: 同一错误类型 5 分钟内出现超过 5 次
 
 - id: DQT-087
   name: 堆栈模式重复

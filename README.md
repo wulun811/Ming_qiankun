@@ -9,12 +9,12 @@
 [![PyPI](https://img.shields.io/pypi/v/mingjing?color=blue)](https://pypi.org/project/mingjing/)
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-430%2F0%2F0-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-440%2F0%2F2-brightgreen)]()
 
 [![Dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen)]()
 [![Efficiency](https://img.shields.io/badge/0_LLM_·_0_Writeback_·_RSS%3C50MB-brightgreen)]()
 [![Storage](https://img.shields.io/badge/212K_events-196MB-brightgreen)]()
-[![Compression](https://img.shields.io/badge/v0.11.10_Compression-43%25-brightgreen)]()
+[![Compression](https://img.shields.io/badge/v0.11.12.post1_Compression-43%25-brightgreen)]()
 [![PRs](https://img.shields.io/badge/PRs-welcome-orange)](https://github.com/wulun811/Ming_qiankun/pulls)
 
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-%E2%9C%93_verified-brightgreen)]()
@@ -53,15 +53,23 @@ cd Ming_qiankun
 
 ```bash
 # Standalone 模式 — 纯 Python 标准库，零第三方依赖
+# PyPI 安装用户：
+MING_MODE=standalone ming start
+
+# 源码用户：
 MING_MODE=standalone python src/ming.py start
 ```
 
 ### 3. 发射测试事件
 
-> **注意**：以下命令必须在 `Ming_qiankun` 项目根目录执行。`sys.path.insert(0, 'src')` 是为让 Python 能找到探针模块。
+> **PyPI 安装用户**（无需 git clone）：
+> 安装后直接使用，探针模块自动在包路径中。
 
 ```bash
-# 打开另一个终端，确保在项目根目录
+# PyPI 用户：一行命令发射测试事件
+python -m mingjing demo
+
+# 源码用户：以下命令需在项目根目录执行
 python -c "
 import sys; sys.path.insert(0, 'src')
 from probe_uni import ProbeUni
@@ -77,23 +85,21 @@ print('Event emitted!')
 
 ### 4. 查看诊断
 
-> **两个入口**：`src/ming.py` 负责服务管理（启动/停止归档器和 Web），`src/cli.py` 负责查询诊断。你也可以用 `python src/cli.py --help` 查看所有命令。
+> **两个入口**：`ming` CLI 负责服务管理（启动/停止归档器和 Web）和查询诊断。
 
 ```bash
-python src/cli.py dx list
+# 查看当前系统诊断
+ming dx list
 ```
 
 ### 5. 查看 Web 目镜
 
 ```bash
 # 启动 Web 服务（自动导出 + 自动刷新，绑定 127.0.0.1:18088）
-python src/ming.py web start
+ming web serve
 
-# 局域网访问（绑定 0.0.0.0）
-python src/ming.py web start --port 18088
-# 然后在 server 启动时手动指定 --host 0.0.0.0：
-python src/plugins/web_dashboard/server.py --daemon --host 0.0.0.0 --port 18088 --no-browser
-
+# 局域网访问
+ming web serve --port 18088
 # 浏览器打开 http://localhost:18088 或 http://<本机IP>:18088
 ```
 
@@ -142,11 +148,10 @@ docker run -d --name ming -p 18088:18088 ming
 
 | 模块 | 行数 | 职责 |
 |------|------|------|
-| `probe_uni.py` | ~245 | 无状态热轨写入器，零数据库依赖 |
-| `archiver.py` | ~465 | 唯一写入者，顺序扫描 hot → SQLite |
-| `cli.py` | ~259 | 命令行：dx/health/skill/query/status/web |
-| `watchdog.py` | ~163 | 进程守护 + 磁盘告警 |
-| `query_bridge.py` | ~99 | 只读查询接口 |
+| `probe_uni.py` | ~340 | 无状态热轨写入器，零数据库依赖 |
+| `archiver.py` | ~670 | 唯一写入者，顺序扫描 hot → SQLite |
+| `cli.py` | ~380 | 命令行：dx/health/skill/query/status/web |
+| `lit_lite.py` | ~240 | 诊断核心引擎 |
 
 ### 适配器（官方参考实现）
 
@@ -264,7 +269,7 @@ docker run -d --name ming -p 18088:18088 ming
 | DQT-086 | 异常类型频率暴增 | P1 | 同一错误类型 5 分钟内出现超过 10 次 |
 | DQT-087 | 堆栈模式重复 | P2 | 相同堆栈跟踪频繁出现，可能是同一根因 |
 
-> **完整 157 种病症定义** 见 [`config/diseases.yaml`](config/diseases.yaml)。通过 `python src/cli.py dx list` 查看当前系统诊断结果。
+> **完整 157 种病症定义** 见 [`config/diseases.yaml`](config/diseases.yaml)。通过 `ming dx list` 查看当前系统诊断结果。
 
 ---
 
@@ -280,6 +285,26 @@ docker run -d --name ming -p 18088:18088 ming
 
 ---
 
+## 为什么选乾坤镜？
+
+### 与同类工具对比
+
+| 维度 | **乾坤镜** | LangSmith | Langfuse | Phoenix (Arize) | OpenTelemetry |
+|------|-----------|-----------|----------|-----------------|---------------|
+| **第三方依赖** | **0**（Standalone 零依赖） | 需 SDK + API Key | 需 SDK + API Key | 需 SDK + Phoenix 后端 | OTel SDK + Collector |
+| **LLM API 调用** | **0**（纯本地） | 需要（数据上传） | 需要（数据上传） | 不需要 | 不需要 |
+| **内存占用** | **18~38 MB** | 数百 MB（含后端） | 数百 MB（含后端） | ~200 MB | 数十 MB（Collector） |
+| **离线可用** | **✅ 完全离线** | ❌ 需联网 | ❌ 需联网 | ✅ 本地可部署 | ✅ |
+| **诊断规则引擎** | **157 种病症** | ❌ 无 | ❌ 无 | ❌ 无 | ❌ 无 |
+| **安装成本** | `pip install` → 即用 | 注册 → SDK 接入 | 注册 → SDK 接入 | `pip install` → 启动后端 | 安装 Collector → 配置 |
+| **开源许可** | BSL 1.1 → Apache 2.0 | 闭源 SaaS | 闭源 SaaS | Elastic 2.0 | Apache 2.0 |
+| **数据隐私** | **数据不离机** | 数据上传云端 | 数据上传云端 | 本地部署可选 | 自控 |
+| **前端界面** | 轻量 Web 面板 | 功能丰富 SaaS | 功能丰富 SaaS | 丰富可视化 | Grafana 集成 |
+
+> **乾坤镜的定位**：不是要替代 LangSmith/Langfuse，而是为**纯本地部署**、**资源受限**、**需要语义诊断而非原始指标**的场景提供零依赖方案。
+
+---
+
 ## 双模式
 
 | 模式 | 环境变量 | 持久层 | 依赖 |
@@ -289,7 +314,7 @@ docker run -d --name ming -p 18088:18088 ming
 
 ```bash
 # Standalone（默认）
-python src/ming.py start
+ming start
 
 # Cluster
 MING_MODE=cluster \
@@ -297,7 +322,7 @@ MING_MODE=cluster \
   WQ_DB_USER=root \
   WQ_DB_PASSWORD=secret \
   WQ_DB_NAME=ming \
-  python src/ming.py start
+  ming start
 ```
 
 ---
@@ -316,17 +341,17 @@ Standalone 模式下，归档器默认处理 **1000 事件/秒**。通过环境�
 
 ```bash
 # 场景 1: 默认（大多数用户，1000 events/s）
-MING_MODE=standalone python src/ming.py start
+MING_MODE=standalone ming start
 
 # 场景 2: 高吞吐（写入密集，~5000 events/s）
 WQ_ARCHIVER_BATCH_SIZE=5000 \
 WQ_ARCHIVER_FLUSH_SEC=0.5 \
-MING_MODE=standalone python src/ming.py start
+MING_MODE=standalone ming start
 
 # 场景 3: 省电模式（低负载设备，~200 events/s）
 WQ_ARCHIVER_BATCH_SIZE=200 \
 WQ_ARCHIVER_FLUSH_SEC=5.0 \
-MING_MODE=standalone python src/ming.py start
+MING_MODE=standalone ming start
 ```
 
 > **提示**：调整参数后需重启归档器生效。前端 Config 面板可查看当前配置值（只读）。
@@ -343,7 +368,7 @@ python -m pytest tests/ -v
 python -m pytest tests/test_probe_*_mock.py -v
 ```
 
-当前状态：**413 passed, 0 skipped, 0 failed**
+当前状态：**440 passed, 0 failed, 2 skipped**
 
 ---
 
@@ -408,4 +433,4 @@ Business Source License 1.1 — 年收入 <$100K 的公司和个人免费商用�
 
 ---
 
-**乾坤镜 v0.11.9m — 为社区而生。**
+**乾坤镜 v0.11.12.post1 — 为社区而生。**

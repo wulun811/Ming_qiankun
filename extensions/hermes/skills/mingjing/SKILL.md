@@ -230,9 +230,11 @@ cd ~/ming-run
 ```bash
 ./ming web serve              # 启动 Web UI（端口 18088）
 ./ming web serve --port 9090  # 自定义端口
+./ming web stop               # 停止 Web UI
 ./ming web export             # 导出数据
 ```
 
+Web 面板是独立进程，停止后不影响归档器核心功能。
 访问 `http://localhost:18088` 查看实时数据。
 
 ## JSON 输出格式

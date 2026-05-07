@@ -76,7 +76,7 @@ cd /path/to/mingjing && python3 src/plugins/web_dashboard/server.py --daemon --h
 
 Access `http://localhost:18088` or `http://<your-ip>:18088` for real-time data.
 
-> **Resource profile**: Archiver + Web panel are independent daemons. **0 LLM calls, 0 network outbound, ~30MB resident memory.** Probes auto-start/stop with OpenClaw (plugin mechanism), but archiver and Web panel **do not auto-start with OpenClaw**.
+> **Resource profile**: Archiver + Web panel are independent daemons. **0 LLM calls, 0 network outbound.** Archiver ~40MB resident, Web panel optional + ~50MB. Probes auto-start/stop with OpenClaw (plugin mechanism), but archiver and Web panel **do not auto-start with OpenClaw**.
 
 ## ⚠️ First-time Setup Notes
 
@@ -212,6 +212,7 @@ sudo systemctl enable ming-archiver ming-web
 | v0.11.5 | 66 ready | role/error_type fields, tool/assistant stream support |
 | v0.11.4 | 33 ready | __health__ event, events table sync |
 | v0.11.9m | 157 | Probe management commands, Hermes install fix |
+| v0.11.10 | 157 | Three-tier compression; streaming archiver RAM ~15% reduction |
 
 ## Architecture Limitations
 

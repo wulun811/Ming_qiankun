@@ -1,4 +1,4 @@
-# Mingjing v0.11.9m — Documentation Index
+# Mingjing v0.11.10 — Documentation Index
 
 > **AI Agent Diagnostic Refraction Array** — Zero-intrusion observability for LLM calls, tool execution, memory retrieval, and Agent orchestration.
 
@@ -62,11 +62,12 @@ print('Event emitted!')
 ming dx list
 ```
 
-### 5. Open Web Dashboard
+### 5. Web Dashboard (Optional)
 
 ```bash
-ming web start
+ming web serve             # Start
 # Browser: http://localhost:18088
+ming web stop              # Stop anytime, core unaffected
 ```
 
 ---
@@ -79,7 +80,7 @@ ming web start
 | 3min × 5000/s | 884K | 100% | 18MB |
 | 75s × 2000/s (150K) | 150K | 100% | **38MB** |
 
-> **Resident memory < 40MB**. Archiver + Web panel ~ 30MB. 0 LLM calls, 0 network outbound.
+> **Resident memory < 40MB** (archiver). Web panel optional + ~50MB. 0 LLM calls, 0 network outbound.
 
 ---
 
@@ -94,7 +95,7 @@ ming web start
 | [04 Data Model](./04_data_model_en.md) | SQLite schema, hash chain, integrity |
 | [05 API Specification](./05_api_specification_en.md) | CLI, Web API, unified query |
 | [06 Operations Manual](./06_operations_manual_en.md) | Environment variables, deployment, troubleshooting |
-| [07 Testing System](./07_testing_system_en.md) | Performance benchmarks, 413 tests |
+| [07 Testing System](./07_testing_system_en.md) | Performance benchmarks, 440 tests |
 | [08 OpenClaw User Guide](./08_mingjing_openclaw_user_guide_en.md) | OpenClaw framework integration guide |
 
 ---
@@ -108,4 +109,4 @@ ming web start
 
 ---
 
-**Mingjing v0.11.9m — Pure data baseplane + Plugin executor + Three-layer decoupling. Lightweight base, unlimited ecosystem.**
+**Mingjing v0.11.10 — Pure data baseplane + Plugin executor + Three-layer decoupling. Lightweight base, unlimited ecosystem.**

@@ -1,4 +1,4 @@
-# 乾坤镜 Mingjing v0.11.9-alpha
+# 乾坤镜 Mingjing v0.11.10
 
 > **AI Agent 诊断折射阵列** — 零侵入观测 LLM 调用、工具执行、记忆检索与 Agent 编排  
 > **乾坤镜是 LIT 1.4 的轻量折射阵列，不是独立诊断中台。**
@@ -69,11 +69,12 @@ print('Event emitted!')
 python src/cli.py dx list
 ```
 
-### 5. 打开 Web 目镜
+### 5. Web 目镜（可选）
 
 ```bash
-python src/ming.py web start
+python src/ming.py web serve        # 启动
 # 浏览器访问 http://localhost:18088
+python src/ming.py web stop         # 随时关闭，不影响核心
 ```
 
 ---
@@ -86,7 +87,7 @@ python src/ming.py web start
 | 3min × 5000/s | 884K | 100% | 18MB |
 | 75s × 2000/s（15 万） | 150K | 100% | **38MB** |
 
-> **常驻内存 <40MB**，归档器 + Web 面板约 30MB，0 LLM 调用，0 网络出站。
+> **常驻内存 <40MB**（归档器），Web 面板可选 + ~50MB，0 LLM 调用，0 网络出站。
 
 ---
 
@@ -101,7 +102,7 @@ python src/ming.py web start
 | [04_数据模型.md](./04_数据模型.md) | SQLite 表结构、哈希链、完整性 |
 | [05_接口规范.md](./05_接口规范.md) | CLI、Web API、统一查询入口 |
 | [06_运维手册.md](./06_运维手册.md) | 环境变量、部署、故障排查 |
-| [07_测试体系.md](./07_测试体系.md) | 性能基准、389 项测试、冒烟测试 |
+| [07_测试体系.md](./07_测试体系.md) | 性能基准、440 项测试、冒烟测试 |
 | [08_乾坤镜OpenClaw用户指南.md](./08_乾坤镜OpenClaw用户指南.md) | OpenClaw 框架集成指南 |
 
 ---
@@ -116,4 +117,4 @@ python src/ming.py web start
 
 ---
 
-**乾坤镜 v0.11.9-alpha — 纯数据底座 + 插件执行器 + 三层解耦。底座轻量，生态无上限。**
+**乾坤镜 v0.11.10 — 纯数据底座 + 插件执行器 + 三层解耦。底座轻量，生态无上限。**

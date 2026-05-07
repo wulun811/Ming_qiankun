@@ -3,6 +3,7 @@
 
 import sys, unittest, json, tempfile, os, time, random, hashlib, sqlite3, csv
 from pathlib import Path
+import pytest
 
 _src = Path(__file__).parent.parent / "src"
 if str(_src) not in sys.path:
@@ -69,6 +70,7 @@ def _write_hot(hot_dir, system, events_batch):
         f.flush()
 
 
+@pytest.mark.stress
 class TestStress150K(unittest.TestCase):
     """15 万事件压力测试，监控曲线 + 无泄漏断言"""
 

@@ -52,7 +52,7 @@ Rationale: Two independent observation sources confirming the same symptom = con
 
 ---
 
-## III. Always-On Real-time Alerts (v0.11.9)
+## III. Always-On Real-time Alerts (v0.11.10)
 
 ### 3.1 Background
 

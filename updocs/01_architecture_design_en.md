@@ -117,6 +117,7 @@ Business System → probe_uni.py → JSONL Hot Rail → archiver.py → SQLite/M
 | v0.11.8 | Credential vault + full audit fixes |
 | v0.11.9 | **Always-On alerts**: 15 rules bypassing triage blind spots; unified query API; 413 tests |
 | v0.11.9m | Probe management (list/uninstall); Hermes install fix; code review false positive cleanup |
+| v0.11.10 | Three-tier compression + zlib; streaming archiver; RAM reduced ~15%; 440 tests |
 
 ---
 

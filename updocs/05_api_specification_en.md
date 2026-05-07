@@ -59,7 +59,7 @@
 | `GET /api/config` | Archiver configuration (read-only) |
 | `GET /api/version` | Frontend version |
 
-### 2.2 Unified Query API (v0.11.9)
+### 2.2 Unified Query API (v0.11.10)
 
 `GET /api/query?name=X&params=...`
 
@@ -143,7 +143,7 @@ Defined via `~/.ming/plugins/*/*.skill.yaml` file:
 
 ---
 
-## V. Frontend Features (v0.11.9)
+## V. Frontend Features (v0.11.10)
 
 ![Web Dashboard Screenshot](./image/yanshi.jpg)
 

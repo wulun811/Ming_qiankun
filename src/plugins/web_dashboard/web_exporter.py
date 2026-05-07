@@ -425,28 +425,69 @@ def _collect_gpu():
         return []
 
 
+def _read_archiver_pid():
+    try:
+        text = (Path.home() / ".ming" / "standalone.pid").read_text().strip()
+        pid = int(text)
+        if Path(f"/proc/{pid}").exists():
+            return pid
+    except (OSError, ValueError):
+        pass
+    try:
+        conn = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
+        conn.execute("PRAGMA busy_timeout=3000")
+        row = conn.execute(
+            "SELECT pid FROM system_pid WHERE system = 'mingjing' AND pid > 0 LIMIT 1"
+        ).fetchone()
+        conn.close()
+        if row and Path(f"/proc/{row[0]}").exists():
+            return row[0]
+    except Exception:
+        pass
+    return None
+
+
 def _collect_footprint():
     """采集乾坤镜自身及所有已注册系统的资源脚印"""
     systems = []
 
-    # 1. 乾坤镜自身
-    self_status = _read_proc_status(os.getpid())
+    # 1. 乾坤镜自身（归档器进程，不是 web 面板自身）
+    archiver_pid = _read_archiver_pid()
+    mingjing_pid = archiver_pid if archiver_pid else os.getpid()
+    self_status = _read_proc_status(mingjing_pid)
     if self_status:
         systems.append(
             {
                 "system": "mingjing",
                 "rss_mb": self_status.get("rss_mb", 0),
                 "vsz_mb": self_status.get("vsz_mb", 0),
-                "cpu_pct": round(_proc_cpu_pct(os.getpid()), 1),
-                "fd_count": _proc_fd_count(os.getpid()),
-                "uptime_min": _proc_uptime_min(os.getpid()),
+                "cpu_pct": round(_proc_cpu_pct(mingjing_pid), 1),
+                "fd_count": _proc_fd_count(mingjing_pid),
+                "uptime_min": _proc_uptime_min(mingjing_pid),
                 "excluded": False,
+            }
+        )
+
+    # 1b. Web 面板自身（可选 GUI，区别于归档器）
+    web_pid = os.getpid()
+    web_status = _read_proc_status(web_pid)
+    if web_status:
+        systems.append(
+            {
+                "system": "mingjing web",
+                "rss_mb": web_status.get("rss_mb", 0),
+                "vsz_mb": web_status.get("vsz_mb", 0),
+                "cpu_pct": round(_proc_cpu_pct(web_pid), 1),
+                "fd_count": _proc_fd_count(web_pid),
+                "uptime_min": _proc_uptime_min(web_pid),
+                "excluded": False,
+                "mode": "white",
             }
         )
 
     # 2. 已注册系统
     excluded = _get_excluded()
-    seen_pids = {os.getpid()}
+    seen_pids = {web_pid, mingjing_pid}
     if DB.exists():
         try:
             conn = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
@@ -464,7 +505,7 @@ def _collect_footprint():
                 seen_pids.add(pid)
                 systems.append(
                     {
-                        "system": system + " (probe)",
+                        "system": system,
                         "rss_mb": status.get("rss_mb", 0),
                         "vsz_mb": status.get("vsz_mb", 0),
                         "cpu_pct": round(_proc_cpu_pct(pid), 1),
@@ -508,7 +549,7 @@ def _collect_footprint():
                             "fd_count": _proc_fd_count(best_main["pid"]),
                             "uptime_min": _proc_uptime_min(best_main["pid"]),
                             "excluded": system in excluded,
-                            "mode": mode,
+                            "mode": "white",
                         }
                     )
         except sqlite3.OperationalError:
@@ -631,6 +672,7 @@ def export():
     try:
         conn = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
         conn.execute("PRAGMA busy_timeout=5000")
+        conn.execute("PRAGMA mmap_size = 0")
         conn.row_factory = sqlite3.Row
     except sqlite3.OperationalError:
         return _write_empty_data()

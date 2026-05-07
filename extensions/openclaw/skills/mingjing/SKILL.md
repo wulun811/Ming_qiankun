@@ -98,7 +98,7 @@ cd ~/Ming_qiankun && python3 src/plugins/web_dashboard/server.py --daemon --host
 
   访问 `http://localhost:18088` 或 `http://<本机IP>:18088` 查看实时数据。
 
-> **⚡ 资源特征**：乾坤镜归档器和 Web 面板是独立守护进程，**0 LLM 调用、0 网络出站、常驻内存约 30MB**。探针随 OpenClaw 自动启停（插件机制），但归档器和 Web 面板**不会随 OpenClaw 自动启动**——需要你手动启动或设为开机自启。
+> **⚡ 资源特征**：乾坤镜归档器和 Web 面板是独立守护进程，**0 LLM 调用、0 网络出站**。归档器常驻 ~40MB，Web 面板可选 + ~50MB。探针随 OpenClaw 自动启停（插件机制），但归档器和 Web 面板**不会随 OpenClaw 自动启动**——需要你手动启动或设为开机自启。
 
 ## ⚠️ 首次安装注意事项
 
@@ -423,7 +423,7 @@ python3 src/plugins/web_dashboard/server.py --stop
 
 强烈建议设为开机自启。如果不设，每次 OpenClaw 重启时你都需要手动执行第 5 步两条命令，否则归档器和 Web 面板不会在线。
 
-> 归档器 + Web 面板常驻负担极轻（~30MB 内存、0 LLM、0 联网），设为系统服务无感知开销。
+> 归档器常驻负担极轻（~40MB）、0 LLM、0 联网，设为系统服务无感知开销。Web 面板可选 + ~50MB，关闭方式：`python3 src/cli.py web stop`。
 
 ```bash
 # 注册 systemd 服务

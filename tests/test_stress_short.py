@@ -3,12 +3,14 @@
 
 import sys, unittest, json, tempfile, os, time, random, hashlib, sqlite3, shutil
 from pathlib import Path
+import pytest
 
 _src = Path(__file__).parent.parent / "src"
 if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 
 
+@pytest.mark.stress
 class TestStressShort(unittest.TestCase):
     """短时压力测试：3 秒 x 500 eps = 1500 事件，归档成功率 >= 99%"""
 

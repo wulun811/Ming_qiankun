@@ -273,7 +273,7 @@ def main():
     sub.add_parser("verify", help="校验哈希链完整性")
 
     p_web = sub.add_parser("web", help="Web 面板（导出/启动服务）")
-    p_web.add_argument("action", choices=["export", "serve"])
+    p_web.add_argument("action", choices=["export", "serve", "stop"])
     p_web.add_argument("--port", type=int, default=18088)
     p_web.add_argument(
         "--host", type=str, default=None, help="绑定地址（默认 127.0.0.1）"

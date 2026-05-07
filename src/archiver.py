@@ -86,7 +86,7 @@ class Archiver:
         conn.execute(f"PRAGMA busy_timeout={timeout * 1000}")
         conn.execute("PRAGMA foreign_keys = ON")
         conn.execute("PRAGMA cache_size = -2000")
-        conn.execute("PRAGMA mmap_size = 268435456")
+        conn.execute("PRAGMA mmap_size = 8388608")
         if read_only:
             conn.execute("PRAGMA query_only=ON")
         return conn
@@ -155,246 +155,21 @@ class Archiver:
             self._heartbeat()
             return 0
         conn = self._open_db()
+        got_events = False
+        total_events = 0
         try:
             cursor = conn.cursor()
             tbl = init_diagnoses_table(cursor)
-            all_events = []
-            metadata = {}
-            expectations = []
-            health_records = []
-            diagnoses = []
-            anchors = []
-            for filepath in sorted(
+            for staging_path in sorted(
                 staging_files.values(), key=lambda p: p.stat().st_mtime
             ):
-                try:
-                    lines = filepath.read_text(encoding="utf-8").strip().splitlines()
-                except Exception:
-                    continue
-                for line in lines:
-                    try:
-                        ev = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    etype = ev.get("event_type", "")
-                    system = ev.get("system", "")
-                    if not system and etype not in ("__expect__", "__fulfill__"):
-                        continue
-                    if etype == "__expect__":
-                        expectations.append(ev)
-                    elif etype == "__fulfill__":
-                        self._update_expectation(
-                            cursor, system, ev.get("payload", {}).get("expected_event")
-                        )
-                    elif etype == "__health__":
-                        health_records.append(ev)
-                        ev["integrity_score"] = 1.0
-                        ev["integrity"] = "verified"
-                        all_events.append(ev)
-                    elif etype == "__diagnosis__":
-                        diagnoses.append(ev)
-                    elif etype == "__anchor__":
-                        anchors.append(ev)
-                    elif etype.startswith("__"):
-                        if etype == "__register__":
-                            metadata[system] = {
-                                "register": ev.get("payload", {}),
-                                "last_touch": ev.get("timestamp", 0),
-                            }
-                        elif etype == "__touch__":
-                            ts = ev.get("timestamp", 0)
-                            ev_pid = ev.get("pid") or ev.get("payload", {}).get(
-                                "pid", 0
-                            )
-                            if system in metadata:
-                                metadata[system]["last_touch"] = ts
-                                if (
-                                    "pid" not in metadata[system]
-                                    or metadata[system]["pid"] == 0
-                                ):
-                                    metadata[system]["touch_pid"] = ev_pid
-                                if "mode" not in metadata[system]:
-                                    metadata[system]["mode"] = ev.get("mode", "white")
-                            else:
-                                metadata[system] = {
-                                    "last_touch": ts,
-                                    "touch_pid": ev_pid,
-                                    "mode": ev.get("mode", "white"),
-                                }
-                    else:
-                        score = self._integrity_score(ev)
-                        ev["integrity_score"] = score
-                        if score >= 0.85:
-                            ev["integrity"] = "verified"
-                        elif score >= 0.5:
-                            ev["integrity"] = "rebooted"
-                        else:
-                            ev["integrity"] = "corrupted"
-                        all_events.append(ev)
-            if all_events:
-                all_events.sort(
-                    key=lambda x: (x.get("lamport", 0), x.get("monotonic_ms", 0))
-                )
-                last_hash = cursor.execute(
-                    "SELECT curr_hash FROM events ORDER BY id DESC LIMIT 1"
-                ).fetchone()
-                prev = last_hash[0] if last_hash else "0" * 64
-                batch = []
-                for ev in all_events:
-                    payload_dict = ev.get("payload", {})
-                    payload_text = json.dumps(
-                        payload_dict, ensure_ascii=False, sort_keys=True
-                    )
-                    payload_hash = hashlib.sha256(
-                        payload_text.encode("utf-8")
-                    ).hexdigest()
-                    content = json.dumps(
-                        {
-                            "system": ev["system"],
-                            "event_type": ev["event_type"],
-                            "payload_hash": payload_hash,
-                            "timestamp": ev.get("timestamp", 0),
-                        },
-                        sort_keys=True,
-                    )
-                    curr = hashlib.sha256(f"{prev}{content}".encode()).hexdigest()
-                    batch.append(
-                        (
-                            ev["system"],
-                            ev.get("mode", "white"),
-                            ev["event_type"],
-                            json.dumps(payload_dict),
-                            ev.get("content_hash", ""),
-                            prev,
-                            curr,
-                            ev.get("timestamp", 0),
-                            ev.get("integrity", "pending"),
-                            ev.get("chain_status", "linked"),
-                            ev.get("integrity_score", 1.0),
-                            0,
-                            ev.get("monotonic_ms"),
-                            ev.get("lamport"),
-                            payload_hash,
-                        )
-                    )
-                    prev = curr
-                cursor.executemany(
-                    "INSERT OR IGNORE INTO events (system, mode, event_type, payload, content_hash, prev_hash, curr_hash, timestamp, integrity, chain_status, integrity_score, ttl_protected, monotonic_ms, lamport, payload_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    batch,
-                )
-            for system, meta in metadata.items():
-                reg = meta.get("register")
-                pid = reg.get("pid", 0) if reg else meta.get("touch_pid", 0)
-                if not pid:
-                    pid = 0
-                registered_at = (
-                    reg.get("registered_at", meta.get("last_touch", 0))
-                    if reg
-                    else meta.get("last_touch", 0)
-                )
-                last_seen = meta.get("last_touch", registered_at)
-                mode = reg.get("mode", "white") if reg else meta.get("mode", "white")
-                cursor.execute(
-                    "INSERT OR REPLACE INTO system_pid (system, pid, registered_at, last_seen, mode) VALUES (?, ?, ?, ?, ?)",
-                    (system, pid, registered_at, last_seen, mode),
-                )
-            for hr in health_records:
-                p = hr.get("payload", {})
-                cursor.execute(
-                    "INSERT INTO probe_health (system, window_start, emit_count, drop_count, disk_free_mb, last_errors, integrity_score) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        hr["system"],
-                        hr["timestamp"],
-                        p.get("emit_success_count_1m", 0),
-                        p.get("emit_drop_count_1m", 0),
-                        p.get("disk_free_mb", -1),
-                        json.dumps(p.get("last_errors", [])),
-                        1.0,
-                    ),
-                )
-            for exp in expectations:
-                p = exp.get("payload", {})
-                cursor.execute(
-                    "INSERT INTO expectations (system, expected_event, deadline, fulfilled, created_at) VALUES (?, ?, ?, 0, ?)",
-                    (
-                        exp["system"],
-                        p.get("expected_event"),
-                        p.get("deadline"),
-                        exp.get("timestamp", time.time()),
-                    ),
-                )
-            dx_prev_hash = cursor.execute(
-                f"SELECT curr_hash FROM {tbl} ORDER BY id DESC LIMIT 1"
-            ).fetchone()
-            dx_prev = dx_prev_hash[0] if dx_prev_hash else "0" * 64
-            for dx in diagnoses:
-                evidence_json = json.dumps(dx.get("evidence", []), sort_keys=True)
-                dx_content = json.dumps(
-                    {
-                        "diagnosis_id": dx.get("diagnosis_id"),
-                        "system": dx.get("system"),
-                        "name": dx.get("diagnosis_name"),
-                        "evidence_hash": dx.get("evidence_hash", ""),
-                    },
-                    sort_keys=True,
-                )
-                dx_curr = hashlib.sha256(f"{dx_prev}{dx_content}".encode()).hexdigest()
-                evidence_hash_computed = hashlib.sha256(
-                    evidence_json.encode()
-                ).hexdigest()[:16]
-                cursor.execute(
-                    f"""
-                    INSERT OR IGNORE INTO {tbl} (
-                        diagnosis_id, system, fault_id, diagnosis_name, confidence,
-                        severity, evidence, evidence_hash, evidence_quality,
-                        inference_chain, plugin_name, plugin_version, status, created_at,
-                        prev_hash, curr_hash
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        dx.get("diagnosis_id"),
-                        dx.get("system"),
-                        dx.get("fault_id"),
-                        dx.get("diagnosis_name"),
-                        dx.get("confidence"),
-                        dx.get("severity"),
-                        evidence_json,
-                        evidence_hash_computed,
-                        dx.get("evidence_quality", 0),
-                        dx.get("inference_chain"),
-                        dx.get("plugin_name"),
-                        dx.get("plugin_version"),
-                        dx.get("status", "pending"),
-                        dx.get("timestamp", time.time()),
-                        dx_prev,
-                        dx_curr,
-                    ),
-                )
-                dx_prev = dx_curr
-            for a in anchors:
-                p = a.get("payload", {})
-                cursor.execute(
-                    "INSERT OR REPLACE INTO system_anchors (file_path, sha256, registered_at) VALUES (?, ?, ?)",
-                    (
-                        p.get("file_path", ""),
-                        p.get("sha256", ""),
-                        a.get("timestamp", time.time()),
-                    ),
-                )
-            conn.commit()
+                file_events = self._process_one_file(cursor, tbl, staging_path)
+                if file_events > 0:
+                    total_events += file_events
+                    got_events = True
+                conn.commit()
         finally:
             conn.close()
-        for staging_path in staging_files.values():
-            try:
-                dest = self.COLD / staging_path.name
-                staging_path.rename(dest)
-            except OSError:
-                try:
-                    shutil.move(str(staging_path), str(dest))
-                except Exception as e:
-                    self._log_error(e)
-            except Exception as e:
-                self._log_error(e)
         self._heartbeat()
         self._auto_backup()
         if purge_expired:
@@ -405,15 +180,247 @@ class Archiver:
         self._maybe_cleanup_cold()
         self._compress_old_events()
         self._summarize_old_events()
-        if all_events:
+        if got_events:
             self._run_diagnosis()
-        return len(all_events)
+        gc.collect()
+        _libc = ctypes.CDLL("libc.so.6")
+        _libc.malloc_trim(0)
+        return total_events
 
     def _integrity_score(self, event):
         return score_event(event)
 
     def _update_expectation(self, cursor, system, expected_event):
         _update_exp(cursor, system, expected_event)
+
+    def _process_one_file(self, cursor, tbl, staging_path):
+        try:
+            lines = staging_path.read_text(encoding="utf-8").strip().splitlines()
+        except Exception:
+            return 0
+        all_events = []
+        metadata = {}
+        expectations = []
+        health_records = []
+        diagnoses = []
+        anchors = []
+        for line in lines:
+            try:
+                ev = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            etype = ev.get("event_type", "")
+            system = ev.get("system", "")
+            if not system and etype not in ("__expect__", "__fulfill__"):
+                continue
+            if etype == "__expect__":
+                expectations.append(ev)
+            elif etype == "__fulfill__":
+                self._update_expectation(
+                    cursor, system, ev.get("payload", {}).get("expected_event")
+                )
+            elif etype == "__health__":
+                health_records.append(ev)
+                ev["integrity_score"] = 1.0
+                ev["integrity"] = "verified"
+                all_events.append(ev)
+            elif etype == "__diagnosis__":
+                diagnoses.append(ev)
+            elif etype == "__anchor__":
+                anchors.append(ev)
+            elif etype.startswith("__"):
+                if etype == "__register__":
+                    metadata[system] = {
+                        "register": ev.get("payload", {}),
+                        "last_touch": ev.get("timestamp", 0),
+                    }
+                elif etype == "__touch__":
+                    ts = ev.get("timestamp", 0)
+                    ev_pid = ev.get("pid") or ev.get("payload", {}).get("pid", 0)
+                    if system in metadata:
+                        metadata[system]["last_touch"] = ts
+                        if (
+                            "pid" not in metadata[system]
+                            or metadata[system]["pid"] == 0
+                        ):
+                            metadata[system]["touch_pid"] = ev_pid
+                        if "mode" not in metadata[system]:
+                            metadata[system]["mode"] = ev.get("mode", "white")
+                    else:
+                        metadata[system] = {
+                            "last_touch": ts,
+                            "touch_pid": ev_pid,
+                            "mode": ev.get("mode", "white"),
+                        }
+            else:
+                score = self._integrity_score(ev)
+                ev["integrity_score"] = score
+                if score >= 0.85:
+                    ev["integrity"] = "verified"
+                elif score >= 0.5:
+                    ev["integrity"] = "rebooted"
+                else:
+                    ev["integrity"] = "corrupted"
+                all_events.append(ev)
+        if all_events:
+            all_events.sort(
+                key=lambda x: (x.get("lamport", 0), x.get("monotonic_ms", 0))
+            )
+            last_hash = cursor.execute(
+                "SELECT curr_hash FROM events ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+            prev = last_hash[0] if last_hash else "0" * 64
+            batch = []
+            for ev in all_events:
+                payload_dict = ev.get("payload", {})
+                payload_text = json.dumps(
+                    payload_dict, ensure_ascii=False, sort_keys=True
+                )
+                payload_hash = hashlib.sha256(payload_text.encode("utf-8")).hexdigest()
+                content = json.dumps(
+                    {
+                        "system": ev["system"],
+                        "event_type": ev["event_type"],
+                        "payload_hash": payload_hash,
+                        "timestamp": ev.get("timestamp", 0),
+                    },
+                    sort_keys=True,
+                )
+                curr = hashlib.sha256(f"{prev}{content}".encode()).hexdigest()
+                batch.append(
+                    (
+                        ev["system"],
+                        ev.get("mode", "white"),
+                        ev["event_type"],
+                        json.dumps(payload_dict),
+                        ev.get("content_hash", ""),
+                        prev,
+                        curr,
+                        ev.get("timestamp", 0),
+                        ev.get("integrity", "pending"),
+                        ev.get("chain_status", "linked"),
+                        ev.get("integrity_score", 1.0),
+                        0,
+                        ev.get("monotonic_ms"),
+                        ev.get("lamport"),
+                        payload_hash,
+                    )
+                )
+                prev = curr
+            cursor.executemany(
+                "INSERT OR IGNORE INTO events (system, mode, event_type, payload, content_hash, prev_hash, curr_hash, timestamp, integrity, chain_status, integrity_score, ttl_protected, monotonic_ms, lamport, payload_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                batch,
+            )
+        for system, meta in metadata.items():
+            reg = meta.get("register")
+            pid = reg.get("pid", 0) if reg else meta.get("touch_pid", 0)
+            if not pid:
+                pid = 0
+            registered_at = (
+                reg.get("registered_at", meta.get("last_touch", 0))
+                if reg
+                else meta.get("last_touch", 0)
+            )
+            last_seen = meta.get("last_touch", registered_at)
+            mode = reg.get("mode", "white") if reg else meta.get("mode", "white")
+            cursor.execute(
+                "INSERT OR REPLACE INTO system_pid (system, pid, registered_at, last_seen, mode) VALUES (?, ?, ?, ?, ?)",
+                (system, pid, registered_at, last_seen, mode),
+            )
+        for hr in health_records:
+            p = hr.get("payload", {})
+            cursor.execute(
+                "INSERT INTO probe_health (system, window_start, emit_count, drop_count, disk_free_mb, last_errors, integrity_score) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    hr["system"],
+                    hr["timestamp"],
+                    p.get("emit_success_count_1m", 0),
+                    p.get("emit_drop_count_1m", 0),
+                    p.get("disk_free_mb", -1),
+                    json.dumps(p.get("last_errors", [])),
+                    1.0,
+                ),
+            )
+        for exp in expectations:
+            p = exp.get("payload", {})
+            cursor.execute(
+                "INSERT INTO expectations (system, expected_event, deadline, fulfilled, created_at) VALUES (?, ?, ?, 0, ?)",
+                (
+                    exp["system"],
+                    p.get("expected_event"),
+                    p.get("deadline"),
+                    exp.get("timestamp", time.time()),
+                ),
+            )
+        dx_prev_hash = cursor.execute(
+            f"SELECT curr_hash FROM {tbl} ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        dx_prev = dx_prev_hash[0] if dx_prev_hash else "0" * 64
+        for dx in diagnoses:
+            evidence_json = json.dumps(dx.get("evidence", []), sort_keys=True)
+            dx_content = json.dumps(
+                {
+                    "diagnosis_id": dx.get("diagnosis_id"),
+                    "system": dx.get("system"),
+                    "name": dx.get("diagnosis_name"),
+                    "evidence_hash": dx.get("evidence_hash", ""),
+                },
+                sort_keys=True,
+            )
+            dx_curr = hashlib.sha256(f"{dx_prev}{dx_content}".encode()).hexdigest()
+            evidence_hash_computed = hashlib.sha256(evidence_json.encode()).hexdigest()[
+                :16
+            ]
+            cursor.execute(
+                f"""
+                INSERT OR IGNORE INTO {tbl} (
+                    diagnosis_id, system, fault_id, diagnosis_name, confidence,
+                    severity, evidence, evidence_hash, evidence_quality,
+                    inference_chain, plugin_name, plugin_version, status, created_at,
+                    prev_hash, curr_hash
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    dx.get("diagnosis_id"),
+                    dx.get("system"),
+                    dx.get("fault_id"),
+                    dx.get("diagnosis_name"),
+                    dx.get("confidence"),
+                    dx.get("severity"),
+                    evidence_json,
+                    evidence_hash_computed,
+                    dx.get("evidence_quality", 0),
+                    dx.get("inference_chain"),
+                    dx.get("plugin_name"),
+                    dx.get("plugin_version"),
+                    dx.get("status", "pending"),
+                    dx.get("timestamp", time.time()),
+                    dx_prev,
+                    dx_curr,
+                ),
+            )
+            dx_prev = dx_curr
+        for a in anchors:
+            p = a.get("payload", {})
+            cursor.execute(
+                "INSERT OR REPLACE INTO system_anchors (file_path, sha256, registered_at) VALUES (?, ?, ?)",
+                (
+                    p.get("file_path", ""),
+                    p.get("sha256", ""),
+                    a.get("timestamp", time.time()),
+                ),
+            )
+        try:
+            dest = self.COLD / staging_path.name
+            staging_path.rename(dest)
+        except OSError:
+            try:
+                shutil.move(str(staging_path), str(dest))
+            except Exception as e:
+                self._log_error(e)
+        except Exception as e:
+            self._log_error(e)
+        return len(all_events)
 
     def _heartbeat(self):
         write_heartbeat(str(self.HEARTBEAT))
@@ -552,73 +559,64 @@ class Archiver:
             conn = self._open_db()
             try:
                 cutoff = now - self.warm_days * 86400
-                rows = conn.execute(
-                    """
-                    SELECT e.id, e.payload, e.payload_hash
-                    FROM events e
-                    WHERE e.storage_tier = 0 AND e.timestamp < ?
-                      AND e.ttl_protected = 0
-                      AND e.payload IS NOT NULL
-                      AND LENGTH(e.payload) >= ?
-                    """,
-                    (cutoff, self.min_compress_bytes),
-                ).fetchall()
-                if not rows:
-                    return
-                count_before = len(rows)
-                total_before = sum(len(r[1]) for r in rows if r[1])
-                batch = []
+                scanned = 0
                 success = 0
                 fail = 0
                 start_ts = time.time()
-                for ev_id, payload_text, payload_hash in rows:
-                    try:
-                        payload_dict = json.loads(payload_text)
-                        blob = compress_payload(payload_dict)
-                        if not verify_compress_integrity(payload_dict, blob):
-                            raise ValueError("Compression corrupted payload")
-                        batch.append((blob, ev_id))
-                        success += 1
-                    except Exception:
-                        attempts = conn.execute(
-                            "UPDATE events SET compress_attempts = compress_attempts + 1 WHERE id = ? RETURNING compress_attempts",
-                            (ev_id,),
-                        ).fetchone()[0]
-                        if attempts >= 3:
-                            conn.execute(
-                                "UPDATE events SET storage_tier = 2 WHERE id = ?",
+                batch = []
+                offset = 0
+                batch_size = 500
+                while True:
+                    rows = conn.execute(
+                        """
+                        SELECT e.id, e.payload, e.payload_hash
+                        FROM events e
+                        WHERE e.storage_tier = 0 AND e.timestamp < ?
+                          AND e.ttl_protected = 0
+                          AND e.payload IS NOT NULL
+                          AND LENGTH(e.payload) >= ?
+                        LIMIT ? OFFSET ?
+                        """,
+                        (cutoff, self.min_compress_bytes, batch_size, offset),
+                    ).fetchall()
+                    if not rows:
+                        break
+                    scanned += len(rows)
+                    for ev_id, payload_text, payload_hash in rows:
+                        try:
+                            payload_dict = json.loads(payload_text)
+                            blob = compress_payload(payload_dict)
+                            if not verify_compress_integrity(payload_dict, blob):
+                                raise ValueError("Compression corrupted payload")
+                            batch.append((blob, ev_id))
+                            success += 1
+                        except Exception:
+                            attempts = conn.execute(
+                                "UPDATE events SET compress_attempts = compress_attempts + 1 WHERE id = ? RETURNING compress_attempts",
                                 (ev_id,),
-                            )
-                            self._log_error(
-                                f"Compression failed after 3 attempts for event {ev_id}, marked as failed"
-                            )
-                        fail += 1
-                    if len(batch) >= 500:
+                            ).fetchone()[0]
+                            if attempts >= 3:
+                                conn.execute(
+                                    "UPDATE events SET storage_tier = 2 WHERE id = ?",
+                                    (ev_id,),
+                                )
+                                self._log_error(
+                                    f"Compression failed after 3 attempts for event {ev_id}, marked as failed"
+                                )
+                            fail += 1
+                        if len(batch) >= 500:
+                            self._commit_batch(conn, batch)
+                            batch = []
+                    if batch:
                         self._commit_batch(conn, batch)
                         batch = []
-                if batch:
-                    self._commit_batch(conn, batch)
-                elapsed = (time.time() - start_ts) * 1000
-                total_after = (
-                    sum(
-                        conn.execute(
-                            "SELECT LENGTH(payload_blob) FROM events_blob WHERE event_id = ?",
-                            (r[0],),
-                        ).fetchone()[0]
-                        for r in rows[:success]
-                        if conn.execute(
-                            "SELECT storage_tier FROM events WHERE id = ?", (r[0],)
-                        ).fetchone()[0]
-                        == 1
+                    offset += batch_size
+                if scanned > 0:
+                    elapsed = (time.time() - start_ts) * 1000
+                    self._log_error(
+                        f"compress: scanned={scanned} compressed={success} failed={fail} "
+                        f"elapsed={elapsed:.0f}ms"
                     )
-                    if success > 0
-                    else 0
-                )
-                self._log_error(
-                    f"compress: scanned={count_before} compressed={success} failed={fail} "
-                    f"before={total_before}B after={total_after}B "
-                    f"ratio={total_before / max(total_after, 1):.1f}x elapsed={elapsed:.0f}ms"
-                )
             finally:
                 conn.close()
         except Exception as e:
@@ -653,7 +651,7 @@ class Archiver:
                     time.sleep(backoff)
                     continue
                 self._trim_counter += 1
-                if self._trim_counter >= 300:
+                if self._trim_counter >= 60:
                     self._trim_counter = 0
                     gc.collect()
                     _libc.malloc_trim(0)

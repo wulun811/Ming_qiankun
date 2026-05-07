@@ -9,12 +9,12 @@
 [![PyPI](https://img.shields.io/pypi/v/mingjing?color=blue)](https://pypi.org/project/mingjing/)
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-430%2F0%2F0-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-440%2F0%2F2-brightgreen)]()
 
 [![Dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen)]()
 [![Efficiency](https://img.shields.io/badge/0_LLM_·_0_Writeback_·_RSS%3C50MB-brightgreen)]()
 [![Storage](https://img.shields.io/badge/212K_events-196MB-brightgreen)]()
-[![Compression](https://img.shields.io/badge/v0.11.10_Compression-43%25-brightgreen)]()
+[![Compression](https://img.shields.io/badge/v0.11.12.post1_Compression-43%25-brightgreen)]()
 [![PRs](https://img.shields.io/badge/PRs-welcome-orange)](https://github.com/wulun811/Ming_qiankun/pulls)
 
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-%E2%9C%93_verified-brightgreen)]()
@@ -52,6 +52,10 @@ ming start
 ### 3. Emit a test event
 
 ```bash
+# One-liner (works with pip install):
+python -m mingjing demo
+
+# Or manually:
 python -c "
 from probe_uni import ProbeUni
 p = ProbeUni(system='demo', mode='white')
@@ -73,7 +77,7 @@ ming dx list
 ### 5. Open Web Dashboard
 
 ```bash
-ming web start
+ming web serve
 # Browser: http://localhost:18088
 ```
 
@@ -105,11 +109,10 @@ ming web start
 
 | Module | Lines | Responsibility |
 |--------|-------|---------------|
-| `probe_uni.py` | ~305 | Stateless hot-rail writer, zero database dependency |
-| `archiver.py` | ~470 | Sole writer, sequential scan hot → SQLite |
-| `cli.py` | ~378 | CLI: dx/health/skill/query/status/web |
-| `watchdog.py` | ~259 | Process guardian + disk alerting |
-| `query_bridge.py` | ~336 | Read-only query interface |
+| `probe_uni.py` | ~340 | Stateless hot-rail writer, zero database dependency |
+| `archiver.py` | ~670 | Sole writer, sequential scan hot → SQLite |
+| `cli.py` | ~380 | CLI: dx/health/skill/query/status/web |
+| `lit_lite.py` | ~240 | Diagnostic engine core |
 
 ### Adapters (Official Reference)
 
@@ -243,6 +246,26 @@ Mingjing includes **157 disease detection rules**. Below are 50 examples automat
 
 ---
 
+## Why Mingjing?
+
+### Comparison with alternatives
+
+| Aspect | **Mingjing** | LangSmith | Langfuse | Phoenix (Arize) | OpenTelemetry |
+|--------|------------|-----------|----------|-----------------|---------------|
+| **Dependencies** | **0** (Standalone) | SDK + API Key | SDK + API Key | SDK + Phoenix backend | OTel SDK + Collector |
+| **LLM API calls** | **0** (fully local) | Yes (data upload) | Yes (data upload) | No | No |
+| **Memory** | **18~38 MB** | Hundreds of MB | Hundreds of MB | ~200 MB | Tens of MB |
+| **Offline** | **✅ Fully offline** | ❌ Cloud required | ❌ Cloud required | ✅ Self-hostable | ✅ |
+| **Diagnostic rules** | **157 diseases** | ❌ None | ❌ None | ❌ None | ❌ None |
+| **Setup** | `pip install` → ready | Register → SDK | Register → SDK | `pip install` + backend | Collector setup |
+| **License** | BSL 1.1 → Apache 2.0 | Proprietary SaaS | Proprietary SaaS | Elastic 2.0 | Apache 2.0 |
+| **Data privacy** | **Never leaves host** | Uploads to cloud | Uploads to cloud | Self-host option | Self-managed |
+| **UI** | Lightweight dashboard | Rich SaaS | Rich SaaS | Rich visualization | Grafana integration |
+
+> **Mingjing's niche**: Not a replacement for LangSmith/Langfuse, but a zero-dependency alternative for **fully local deployment**, **resource-constrained environments**, and **semantic diagnosis** over raw metrics.
+
+---
+
 ## Dual Mode
 
 | Mode | Env Var | Storage | Dependency |
@@ -263,7 +286,7 @@ Mingjing includes **157 disease detection rules**. Below are 50 examples automat
 | [04 Data Model](updocs/04_data_model_en.md) | SQLite schema, hash chain, integrity |
 | [05 API Specification](updocs/05_api_specification_en.md) | CLI, Web API, unified query |
 | [06 Operations Manual](updocs/06_operations_manual_en.md) | Environment variables, deployment, troubleshooting |
-| [07 Testing System](updocs/07_testing_system_en.md) | Performance benchmarks, 413 tests |
+| [07 Testing System](updocs/07_testing_system_en.md) | Performance benchmarks, 430 tests |
 | [08 OpenClaw User Guide](updocs/08_mingjing_openclaw_user_guide_en.md) | OpenClaw framework integration guide |
 
 ---
@@ -274,4 +297,4 @@ Mingjing includes **157 disease detection rules**. Below are 50 examples automat
 
 ---
 
-**Mingjing v0.11.9m — Built for the community.**
+**Mingjing v0.11.12.post1 — Built for the community.**

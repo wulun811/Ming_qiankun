@@ -89,6 +89,11 @@ def cmd_web(args):
             subprocess.run(cmd)
         else:
             print("server.py not found")
+    elif args.action == "stop":
+        if server_py.exists():
+            subprocess.run([sys.executable, str(server_py), "--stop"])
+        else:
+            print("server.py not found")
 
 
 def cmd_service(args):

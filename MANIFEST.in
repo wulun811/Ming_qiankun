@@ -11,3 +11,7 @@ prune updocs/image
 recursive-exclude *.pyc
 recursive-exclude *.pyo
 prune .git
+
+# Security: exclude runtime data from packaging
+recursive-exclude src/plugins/web_dashboard data.json
+recursive-exclude src/plugins/web_dashboard triage_snapshot.json

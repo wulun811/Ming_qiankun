@@ -201,6 +201,8 @@ def diagnose():
         (OUT / ".plugin_heartbeat").write_text(str(now))
         return
 
+    always_on_ids = {d.get("id", "") for d in diseases if d.get("always_on") is True}
+
     def is_rule_ready(rule_id: str) -> bool:
         if rule_id in always_on_ids:
             return True
@@ -223,6 +225,7 @@ def diagnose():
     env_profile = _load_env_profile(conn)
 
     executed = 0
+    executed_blocked = 0
     skipped_blocked = 0
     skipped_mcp = 0
     skipped_deferred = 0
@@ -231,7 +234,6 @@ def diagnose():
     _p0_hits = []
     _all_diagnoses = []
     disease_map = {d.get("id", ""): d for d in diseases}
-    always_on_ids = {d.get("id", "") for d in diseases if d.get("always_on") is True}
 
     for rule in diseases:
         rule_id = rule.get("id", "")
@@ -252,9 +254,19 @@ def diagnose():
             skipped_mcp += 1
             continue
 
+        is_rule_blocked = False
         if not is_rule_ready(rule_id):
-            skipped_blocked += 1
-            continue
+            if (
+                triage is not None
+                and triage.get(rule_id, {}).get("status") == "blocked"
+            ):
+                is_rule_blocked = True
+            else:
+                skipped_blocked += 1
+                continue
+
+        if is_rule_blocked:
+            executed_blocked += 1
 
         inference_mode = rule.get("inference_mode", "")
         if inference_mode == "shadow":
@@ -310,6 +322,8 @@ def diagnose():
         elif severity == "P2":
             base_confidence = 0.75
         conf = base_confidence * get_confidence_multiplier(rule_id)
+        if is_rule_blocked:
+            conf *= 0.3
 
         for row in rows:
             ev = _row_to_evidence(row, columns, rule)
@@ -331,7 +345,7 @@ def diagnose():
                     "original_confidence": row_conf,
                     "evidence": [ev],
                     "inference": description,
-                    "event_types": set(rule_dep.get("event_types", [])),
+                    "event_types": list(rule_dep.get("event_types", [])),
                 }
             )
             if severity == "P0":

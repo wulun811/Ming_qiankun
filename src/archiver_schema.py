@@ -38,7 +38,7 @@ def init_schema(conn):
     """初始化所有表和索引（仅 CREATE，不 DROP/ALTER）"""
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA synchronous = NORMAL")
-    conn.execute("PRAGMA temp_store = MEMORY")
+    conn.execute("PRAGMA temp_store = DEFAULT")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

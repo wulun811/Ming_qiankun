@@ -1,5 +1,39 @@
 # Changelog
 
+## [v0.11.12.post1] — 2026-05-07
+
+### Added
+- `src/adapters/daemon_opencode.py` back to public release package
+
+## [v0.11.12] — 2026-05-07
+
+### Added
+- Stress test isolation: `tests/conftest.py` with `stress`/`slow` pytest markers
+- `pre_build_check.py` safety scan (sync to ming-run via OVERRIDE)
+
+### Changed
+- SYS-005 FD leak threshold: `max_fd > 500` → `> 200`
+- AGT-062 error cascade threshold: `cnt > 10` → `> 5`
+- DQT-086 error freq threshold: `cnt > 10` → `> 5`
+- MDL-036 opencode confidence: `0.2` → `0.5`
+- Blocked rules: now execute with `conf * 0.3` instead of being silently skipped
+
+### Fixed
+- `lit_lite.py`: `always_on_ids` moved before closure definitions (defensive)
+- `lit_lite.py`: `event_types` stored as `list` instead of `set` (defensive)
+- `web_exporter.py`: archiver PID fallback to `system_pid` table
+
+### Security
+- `MANIFEST.in`: exclude `data.json` / `triage_snapshot.json`
+- `pyproject.toml`: remove `*.json` wildcard (explicit file list only)
+- Release guide: token must not be shared with AI agent
+
+## [v0.11.11] — 2026-05-07 (YANKED — token leak)
+
+### Security
+- PyPI API token leaked via `llm_output` → `data.json` → tarball
+- Immediate yanked; all fixes folded into v0.11.12
+
 ## [v0.11.10] — 2026-05-07
 
 ### Added
