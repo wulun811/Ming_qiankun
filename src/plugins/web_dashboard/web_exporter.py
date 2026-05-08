@@ -4,6 +4,7 @@
 
 import sqlite3, json, time, os, hashlib, subprocess, sys
 from pathlib import Path
+from contextlib import closing
 
 _src = str(Path(__file__).parent.parent.parent)
 if _src not in sys.path:
@@ -695,194 +696,176 @@ def export():
     except sqlite3.OperationalError:
         return _write_empty_data()
 
-    year = time.strftime("%Y")
-    tbl = f"diagnoses_{year}"
-    now = time.time()
+    with closing(conn):
+        year = time.strftime("%Y")
+        tbl = f"diagnoses_{year}"
+        now = time.time()
 
-    # === 基础系统列表 ===
-    systems = []
-    try:
-        systems = [
-            r[0]
-            for r in conn.execute(
-                "SELECT DISTINCT system FROM events WHERE system NOT IN ('__host__', 'unknown', 'all') ORDER BY system"
-            ).fetchall()
-            if is_known_probe(r[0])
-        ]
-    except sqlite3.OperationalError:
-        pass
-    if "mingjing" not in systems:
-        systems.append("mingjing")
-
-    # === 第 2 层回退：批量查询所有系统的事件时间范围（全量历史）===
-    sys_time_range = {}
-    try:
-        _rows = conn.execute(
-            "SELECT system, MIN(timestamp), MAX(timestamp) FROM events GROUP BY system"
-        ).fetchall()
-        for _r in _rows:
-            sys_time_range[_r[0]] = (_normalize_ts(_r[1]), _normalize_ts(_r[2]))
-    except sqlite3.OperationalError:
-        pass
-
-    # === 诊断病历 ===
-    diagnoses = []
-    try:
-        since = time.time() - 86400
-        diag_cols = "diagnosis_id, system, fault_id, diagnosis_name, confidence, severity, status, evidence_quality, created_at, evidence, inference_chain"
-        rows = conn.execute(
-            f"SELECT {diag_cols} FROM {tbl} WHERE created_at > ? ORDER BY created_at DESC LIMIT 200",
-            (since,),
-        ).fetchall()
-        for r in rows:
-            d = dict(r)
-            # 构建 detail 对象（替代不存在的 detail 列）
-            evidence_raw = d.pop("evidence", "[]")
-            inference_raw = d.pop("inference_chain", "")
-            try:
-                evidence_list = json.loads(evidence_raw) if evidence_raw else []
-            except (json.JSONDecodeError, TypeError):
-                evidence_list = []
-
-            # 提取模型信息：优先从证据中取，取不到则查 events 表
-            model = None
-            for ev in evidence_list:
-                if isinstance(ev, dict):
-                    model = ev.get("key_fields", {}).get("layer_llm", {}).get("model")
-                    if not model:
-                        model = ev.get("layer_llm", {}).get("model")
-                    if model:
-                        break
-            # lit_lite 证据是 SQL 结果不含 model，回查 events 表
-            if not model:
-                try:
-                    diag_time = d.get("created_at")
-                    if diag_time:
-                        row = conn.execute(
-                            """
-                            SELECT json_extract(payload, '$.layer_llm.model') as m
-                            FROM events
-                            WHERE system = ? AND event_type = 'llm_invoke'
-                              AND timestamp BETWEEN ? - 3600 AND ?
-                              AND json_extract(payload, '$.layer_llm.model') IS NOT NULL
-                            ORDER BY timestamp DESC LIMIT 1
-                            """,
-                            (d.get("system"), diag_time, diag_time),
-                        ).fetchone()
-                        if row:
-                            model = row[0]
-                except Exception:
-                    pass
-
-            # === 3 层时间回退 ===
-            # 第 1 层：从证据中提取时间别名（精确）
-            occurred_at = None
-            occurred_at_last = None
-            for ev in evidence_list:
-                if not isinstance(ev, dict):
-                    continue
-                kf = ev.get("key_fields", {})
-                for alias in FIRST_SEEN_ALIASES:
-                    val = kf.get(alias)
-                    if val is not None:
-                        try:
-                            val = _normalize_ts(float(val))
-                            if occurred_at is None or val < occurred_at:
-                                occurred_at = val
-                        except (ValueError, TypeError):
-                            pass
-                        break
-                for alias in LAST_SEEN_ALIASES:
-                    val = kf.get(alias)
-                    if val is not None:
-                        try:
-                            val = _normalize_ts(float(val))
-                            if occurred_at_last is None or val > occurred_at_last:
-                                occurred_at_last = val
-                        except (ValueError, TypeError):
-                            pass
-                        break
-
-            # 第 2 层：系统级事件时间范围回退（近似，全量历史）
-            sys_ts = sys_time_range.get(d.get("system"))
-            if occurred_at is None and sys_ts:
-                occurred_at = sys_ts[0]
-            if occurred_at_last is None and sys_ts:
-                occurred_at_last = sys_ts[1]
-
-            # 第 3 层：created_at 兜底
-            if occurred_at is None:
-                occurred_at = d.get("created_at", 0)
-
-            d["detail"] = {
-                "rule": inference_raw or "",
-                "evidence": evidence_list,
-                "model": model,
-            }
-            d["occurred_at"] = occurred_at
-            d["occurred_at_last"] = occurred_at_last or occurred_at
-            diagnoses.append(d)
-    except sqlite3.OperationalError:
-        pass
-
-    # === 探针健康 ===
-    health = []
-    for s in systems:
+        # === 基础系统列表 ===
+        systems = []
         try:
-            row = conn.execute(
-                """
-                SELECT emit_count, drop_count, disk_free_mb, integrity_score, window_start
-                FROM probe_health WHERE system = ? ORDER BY window_start DESC LIMIT 1
-            """,
-                (s,),
-            ).fetchone()
-            if row:
-                h = dict(row)
-                h["system"] = s
-                h["alive"] = (now - h.get("window_start", 0)) < 60
-                # 补充 pid 和 mode
-                pid_row = conn.execute(
-                    "SELECT pid, mode FROM system_pid WHERE system = ? LIMIT 1",
+            systems = [
+                r[0]
+                for r in conn.execute(
+                    "SELECT DISTINCT system FROM events WHERE system NOT IN ('__host__', 'unknown', 'all') ORDER BY system"
+                ).fetchall()
+                if is_known_probe(r[0])
+            ]
+        except sqlite3.OperationalError:
+            pass
+        if "mingjing" not in systems:
+            systems.append("mingjing")
+
+        # === 第 2 层回退：批量查询所有系统的事件时间范围（全量历史）===
+        sys_time_range = {}
+        try:
+            _rows = conn.execute(
+                "SELECT system, MIN(timestamp), MAX(timestamp) FROM events GROUP BY system"
+            ).fetchall()
+            for _r in _rows:
+                sys_time_range[_r[0]] = (_normalize_ts(_r[1]), _normalize_ts(_r[2]))
+        except sqlite3.OperationalError:
+            pass
+
+        # === 诊断病历 ===
+        diagnoses = []
+        try:
+            since = time.time() - 86400
+            diag_cols = "diagnosis_id, system, fault_id, diagnosis_name, confidence, severity, status, evidence_quality, created_at, evidence, inference_chain"
+            rows = conn.execute(
+                f"SELECT {diag_cols} FROM {tbl} WHERE created_at > ? ORDER BY created_at DESC LIMIT 200",
+                (since,),
+            ).fetchall()
+            for r in rows:
+                d = dict(r)
+                # 构建 detail 对象（替代不存在的 detail 列）
+                evidence_raw = d.pop("evidence", "[]")
+                inference_raw = d.pop("inference_chain", "")
+                try:
+                    evidence_list = json.loads(evidence_raw) if evidence_raw else []
+                except (json.JSONDecodeError, TypeError):
+                    evidence_list = []
+
+                # 提取模型信息：优先从证据中取，取不到则查 events 表
+                model = None
+                for ev in evidence_list:
+                    if isinstance(ev, dict):
+                        model = (
+                            ev.get("key_fields", {}).get("layer_llm", {}).get("model")
+                        )
+                        if not model:
+                            model = ev.get("layer_llm", {}).get("model")
+                        if model:
+                            break
+                # lit_lite 证据是 SQL 结果不含 model，回查 events 表
+                if not model:
+                    try:
+                        diag_time = d.get("created_at")
+                        if diag_time:
+                            row = conn.execute(
+                                """
+                                SELECT json_extract(payload, '$.layer_llm.model') as m
+                                FROM events
+                                WHERE system = ? AND event_type = 'llm_invoke'
+                                  AND timestamp BETWEEN ? - 3600 AND ?
+                                  AND json_extract(payload, '$.layer_llm.model') IS NOT NULL
+                                ORDER BY timestamp DESC LIMIT 1
+                                """,
+                                (d.get("system"), diag_time, diag_time),
+                            ).fetchone()
+                            if row:
+                                model = row[0]
+                    except Exception:
+                        pass
+
+                # === 3 层时间回退 ===
+                # 第 1 层：从证据中提取时间别名（精确）
+                occurred_at = None
+                occurred_at_last = None
+                for ev in evidence_list:
+                    if not isinstance(ev, dict):
+                        continue
+                    kf = ev.get("key_fields", {})
+                    for alias in FIRST_SEEN_ALIASES:
+                        val = kf.get(alias)
+                        if val is not None:
+                            try:
+                                val = _normalize_ts(float(val))
+                                if occurred_at is None or val < occurred_at:
+                                    occurred_at = val
+                            except (ValueError, TypeError):
+                                pass
+                            break
+                    for alias in LAST_SEEN_ALIASES:
+                        val = kf.get(alias)
+                        if val is not None:
+                            try:
+                                val = _normalize_ts(float(val))
+                                if occurred_at_last is None or val > occurred_at_last:
+                                    occurred_at_last = val
+                            except (ValueError, TypeError):
+                                pass
+                            break
+
+                # 第 2 层：系统级事件时间范围回退（近似，全量历史）
+                sys_ts = sys_time_range.get(d.get("system"))
+                if occurred_at is None and sys_ts:
+                    occurred_at = sys_ts[0]
+                if occurred_at_last is None and sys_ts:
+                    occurred_at_last = sys_ts[1]
+
+                # 第 3 层：created_at 兜底
+                if occurred_at is None:
+                    occurred_at = d.get("created_at", 0)
+
+                d["detail"] = {
+                    "rule": inference_raw or "",
+                    "evidence": evidence_list,
+                    "model": model,
+                }
+                d["occurred_at"] = occurred_at
+                d["occurred_at_last"] = occurred_at_last or occurred_at
+                diagnoses.append(d)
+        except sqlite3.OperationalError:
+            pass
+
+        # === 探针健康 ===
+        health = []
+        for s in systems:
+            try:
+                row = conn.execute(
+                    """
+                    SELECT emit_count, drop_count, disk_free_mb, integrity_score, window_start
+                    FROM probe_health WHERE system = ? ORDER BY window_start DESC LIMIT 1
+                """,
                     (s,),
                 ).fetchone()
-                if pid_row:
-                    h["pid"] = pid_row[0]
-                    h["mode"] = pid_row[1] or "white"
-                health.append(h)
-            else:
-                # 回退1：从 events 表最新事件时间推导（最可靠）
-                evt_row = conn.execute(
-                    "SELECT MAX(timestamp) FROM events WHERE system = ?",
-                    (s,),
-                ).fetchone()
-                if evt_row and evt_row[0]:
-                    last_evt = evt_row[0]
-                    # 从 system_pid 补充 pid 和 mode
+                if row:
+                    h = dict(row)
+                    h["system"] = s
+                    h["alive"] = (now - h.get("window_start", 0)) < 60
+                    # 补充 pid 和 mode
                     pid_row = conn.execute(
                         "SELECT pid, mode FROM system_pid WHERE system = ? LIMIT 1",
                         (s,),
                     ).fetchone()
-                    health.append(
-                        {
-                            "system": s,
-                            "emit_count": 0,
-                            "drop_count": 0,
-                            "disk_free_mb": -1,
-                            "integrity_score": 1.0,
-                            "window_start": last_evt,
-                            "alive": (now - last_evt) < 120,
-                            "pid": pid_row[0] if pid_row else 0,
-                            "mode": pid_row[1] if pid_row else "white",
-                        }
-                    )
+                    if pid_row:
+                        h["pid"] = pid_row[0]
+                        h["mode"] = pid_row[1] or "white"
+                    health.append(h)
                 else:
-                    # 回退2：从 system_pid 推导
-                    pid_row = conn.execute(
-                        "SELECT pid, last_seen, mode FROM system_pid WHERE system = ? ORDER BY last_seen DESC LIMIT 1",
+                    # 回退1：从 events 表最新事件时间推导（最可靠）
+                    evt_row = conn.execute(
+                        "SELECT MAX(timestamp) FROM events WHERE system = ?",
                         (s,),
                     ).fetchone()
-                    if pid_row and pid_row[1]:
-                        last_seen = pid_row[1] or 0
+                    if evt_row and evt_row[0]:
+                        last_evt = evt_row[0]
+                        # 从 system_pid 补充 pid 和 mode
+                        pid_row = conn.execute(
+                            "SELECT pid, mode FROM system_pid WHERE system = ? LIMIT 1",
+                            (s,),
+                        ).fetchone()
                         health.append(
                             {
                                 "system": s,
@@ -890,336 +873,365 @@ def export():
                                 "drop_count": 0,
                                 "disk_free_mb": -1,
                                 "integrity_score": 1.0,
-                                "window_start": last_seen,
-                                "alive": (now - last_seen) < 120,
-                                "pid": pid_row[0],
-                                "mode": pid_row[2] or "white",
+                                "window_start": last_evt,
+                                "alive": (now - last_evt) < 120,
+                                "pid": pid_row[0] if pid_row else 0,
+                                "mode": pid_row[1] if pid_row else "white",
                             }
                         )
+                    else:
+                        # 回退2：从 system_pid 推导
+                        pid_row = conn.execute(
+                            "SELECT pid, last_seen, mode FROM system_pid WHERE system = ? ORDER BY last_seen DESC LIMIT 1",
+                            (s,),
+                        ).fetchone()
+                        if pid_row and pid_row[1]:
+                            last_seen = pid_row[1] or 0
+                            health.append(
+                                {
+                                    "system": s,
+                                    "emit_count": 0,
+                                    "drop_count": 0,
+                                    "disk_free_mb": -1,
+                                    "integrity_score": 1.0,
+                                    "window_start": last_seen,
+                                    "alive": (now - last_seen) < 120,
+                                    "pid": pid_row[0],
+                                    "mode": pid_row[2] or "white",
+                                }
+                            )
+            except sqlite3.OperationalError:
+                pass
+
+        # === 未满足预期 ===
+        missing = []
+        try:
+            expectations = conn.execute(
+                """
+                SELECT system, expected_event, deadline, fulfilled
+                FROM expectations WHERE fulfilled = 0 AND deadline < ?
+            """,
+                (now,),
+            ).fetchall()
+            missing = [dict(r) for r in expectations]
         except sqlite3.OperationalError:
             pass
 
-    # === 未满足预期 ===
-    missing = []
-    try:
-        expectations = conn.execute(
-            """
-            SELECT system, expected_event, deadline, fulfilled
-            FROM expectations WHERE fulfilled = 0 AND deadline < ?
-        """,
-            (now,),
-        ).fetchall()
-        missing = [dict(r) for r in expectations]
-    except sqlite3.OperationalError:
-        pass
-
-    # === 最近事件（全局 LIMIT 200，按时间排序）===
-    recent_events = []
-    has_integrity = _has_column(conn, "events", "integrity")
-    has_ingest_channel = _has_column(conn, "events", "_ingest_channel")
-    cols = "e.id, e.system, e.event_type, e.mode, e.integrity_score, e.lamport, e.timestamp, e.payload, e.storage_tier, b.payload_blob"
-    if has_integrity:
-        cols += ", e.integrity"
-    if has_ingest_channel:
-        cols += ", e._ingest_channel"
-    rows = _safe_query(
-        conn,
-        f"SELECT {cols} FROM events e LEFT JOIN events_blob b ON e.id = b.event_id ORDER BY e.timestamp DESC LIMIT 200",
-    )
-    for r in rows:
-        d = dict(r)
-        try:
-            d["payload_obj"] = resolve_payload(d)
-        except (json.JSONDecodeError, TypeError):
-            d["payload_obj"] = {}
-        if not d.get("integrity"):
-            score = d.get("integrity_score", 0) or 0
-            d["integrity"] = (
-                "verified"
-                if score >= 0.9
-                else ("rebooted" if score >= 0.5 else "corrupted")
-            )
-        if not d.get("_ingest_channel"):
-            d["_ingest_channel"] = "hooks"
-        d["model"] = (
-            d.get("payload_obj", {}).get("layer_llm", {}).get("model")
-            if isinstance(d.get("payload_obj"), dict)
-            else None
-        )
-        recent_events.append(d)
-
-    # === Token 统计（按系统）===
-    token_by_system = []
-    for s in systems:
+        # === 最近事件（全局 LIMIT 200，按时间排序）===
+        recent_events = []
+        has_integrity = _has_column(conn, "events", "integrity")
+        has_ingest_channel = _has_column(conn, "events", "_ingest_channel")
+        cols = "e.id, e.system, e.event_type, e.mode, e.integrity_score, e.lamport, e.timestamp, e.payload, e.storage_tier, b.payload_blob"
+        if has_integrity:
+            cols += ", e.integrity"
+        if has_ingest_channel:
+            cols += ", e._ingest_channel"
         rows = _safe_query(
+            conn,
+            f"SELECT {cols} FROM events e LEFT JOIN events_blob b ON e.id = b.event_id ORDER BY e.timestamp DESC LIMIT 200",
+        )
+        for r in rows:
+            d = dict(r)
+            try:
+                d["payload_obj"] = resolve_payload(d)
+            except (json.JSONDecodeError, TypeError):
+                d["payload_obj"] = {}
+            if not d.get("integrity"):
+                score = d.get("integrity_score", 0) or 0
+                d["integrity"] = (
+                    "verified"
+                    if score >= 0.9
+                    else ("rebooted" if score >= 0.5 else "corrupted")
+                )
+            if not d.get("_ingest_channel"):
+                d["_ingest_channel"] = "hooks"
+            d["model"] = (
+                d.get("payload_obj", {}).get("layer_llm", {}).get("model")
+                if isinstance(d.get("payload_obj"), dict)
+                else None
+            )
+            recent_events.append(d)
+
+        # === Token 统计（按系统）===
+        token_by_system = []
+        for s in systems:
+            rows = _safe_query(
+                conn,
+                "SELECT e.storage_tier, e.payload, b.payload_blob "
+                "FROM events e LEFT JOIN events_blob b ON e.id = b.event_id "
+                "WHERE e.system = ? AND e.event_type = 'llm_invoke'",
+                (s,),
+            )
+            inp = out = cnt = 0
+            lats = []
+            for r in rows:
+                cnt += 1
+                p = resolve_payload(dict(r))
+                if not isinstance(p, dict):
+                    continue
+                inp += p.get("layer_llm", {}).get("input_tokens", 0) or 0
+                out += p.get("layer_llm", {}).get("output_tokens", 0) or 0
+                lat = p.get("layer_llm", {}).get("latency_ms", 0) or 0
+                if lat:
+                    lats.append(lat)
+            token_by_system.append(
+                {
+                    "system": s,
+                    "input_tokens": inp,
+                    "output_tokens": out,
+                    "total_tokens": inp + out,
+                    "call_count": cnt,
+                    "avg_latency": sum(lats) / len(lats) if lats else 0,
+                    "max_latency": max(lats) if lats else 0,
+                }
+            )
+        token_by_system.sort(key=lambda x: x.get("total_tokens", 0), reverse=True)
+
+        # === Token 统计（按模型）===
+        model_rows = _safe_query(
             conn,
             "SELECT e.storage_tier, e.payload, b.payload_blob "
             "FROM events e LEFT JOIN events_blob b ON e.id = b.event_id "
-            "WHERE e.system = ? AND e.event_type = 'llm_invoke'",
-            (s,),
+            "WHERE e.event_type = 'llm_invoke'",
         )
-        inp = out = cnt = 0
-        lats = []
-        for r in rows:
-            cnt += 1
+        model_agg = {}
+        for r in model_rows:
             p = resolve_payload(dict(r))
             if not isinstance(p, dict):
                 continue
-            inp += p.get("layer_llm", {}).get("input_tokens", 0) or 0
-            out += p.get("layer_llm", {}).get("output_tokens", 0) or 0
-            lat = p.get("layer_llm", {}).get("latency_ms", 0) or 0
-            if lat:
-                lats.append(lat)
-        token_by_system.append(
-            {
-                "system": s,
-                "input_tokens": inp,
-                "output_tokens": out,
-                "total_tokens": inp + out,
-                "call_count": cnt,
-                "avg_latency": sum(lats) / len(lats) if lats else 0,
-                "max_latency": max(lats) if lats else 0,
-            }
+            model = (p.get("layer_llm") or {}).get("model")
+            if not model:
+                continue
+            inp = (p.get("layer_llm") or {}).get("input_tokens", 0) or 0
+            out = (p.get("layer_llm") or {}).get("output_tokens", 0) or 0
+            if model not in model_agg:
+                model_agg[model] = {
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "call_count": 0,
+                }
+            model_agg[model]["input_tokens"] += inp
+            model_agg[model]["output_tokens"] += out
+            model_agg[model]["call_count"] += 1
+        token_by_model = sorted(
+            [
+                {
+                    "model": m,
+                    **v,
+                    "total_tokens": v["input_tokens"] + v["output_tokens"],
+                }
+                for m, v in model_agg.items()
+            ],
+            key=lambda x: x["total_tokens"],
+            reverse=True,
         )
-    token_by_system.sort(key=lambda x: x.get("total_tokens", 0), reverse=True)
 
-    # === Token 统计（按模型）===
-    model_rows = _safe_query(
-        conn,
-        "SELECT e.storage_tier, e.payload, b.payload_blob "
-        "FROM events e LEFT JOIN events_blob b ON e.id = b.event_id "
-        "WHERE e.event_type = 'llm_invoke'",
-    )
-    model_agg = {}
-    for r in model_rows:
-        p = resolve_payload(dict(r))
-        if not isinstance(p, dict):
-            continue
-        model = (p.get("layer_llm") or {}).get("model")
-        if not model:
-            continue
-        inp = (p.get("layer_llm") or {}).get("input_tokens", 0) or 0
-        out = (p.get("layer_llm") or {}).get("output_tokens", 0) or 0
-        if model not in model_agg:
-            model_agg[model] = {"input_tokens": 0, "output_tokens": 0, "call_count": 0}
-        model_agg[model]["input_tokens"] += inp
-        model_agg[model]["output_tokens"] += out
-        model_agg[model]["call_count"] += 1
-    token_by_model = sorted(
-        [
-            {"model": m, **v, "total_tokens": v["input_tokens"] + v["output_tokens"]}
-            for m, v in model_agg.items()
-        ],
-        key=lambda x: x["total_tokens"],
-        reverse=True,
-    )
+        # === 延迟分布（所有 LLM 调用）===
+        latency_rows = _safe_query(
+            conn,
+            "SELECT e.storage_tier, e.payload, b.payload_blob "
+            "FROM events e LEFT JOIN events_blob b ON e.id = b.event_id "
+            "WHERE e.event_type = 'llm_invoke'",
+        )
+        latencies = []
+        for r in latency_rows:
+            p = resolve_payload(dict(r))
+            if not isinstance(p, dict):
+                continue
+            lat = (p.get("layer_llm") or {}).get("latency_ms")
+            if lat is not None:
+                latencies.append(lat)
+        latency_stats = {}
+        if latencies:
+            latencies.sort()
+            n = len(latencies)
+            latency_stats = {
+                "count": n,
+                "min": latencies[0],
+                "max": latencies[-1],
+                "avg": sum(latencies) / n,
+                "p50": latencies[n // 2],
+                "p95": latencies[int(n * 0.95)],
+                "p99": latencies[int(n * 0.99)],
+            }
 
-    # === 延迟分布（所有 LLM 调用）===
-    latency_rows = _safe_query(
-        conn,
-        "SELECT e.storage_tier, e.payload, b.payload_blob "
-        "FROM events e LEFT JOIN events_blob b ON e.id = b.event_id "
-        "WHERE e.event_type = 'llm_invoke'",
-    )
-    latencies = []
-    for r in latency_rows:
-        p = resolve_payload(dict(r))
-        if not isinstance(p, dict):
-            continue
-        lat = (p.get("layer_llm") or {}).get("latency_ms")
-        if lat is not None:
-            latencies.append(lat)
-    latency_stats = {}
-    if latencies:
-        latencies.sort()
-        n = len(latencies)
-        latency_stats = {
-            "count": n,
-            "min": latencies[0],
-            "max": latencies[-1],
-            "avg": sum(latencies) / n,
-            "p50": latencies[n // 2],
-            "p95": latencies[int(n * 0.95)],
-            "p99": latencies[int(n * 0.99)],
-        }
+        # === API 调用频率（最近 5 分钟，按系统）===
+        call_freq = []
+        window = now - 300
+        for s in systems:
+            rows = _safe_query(
+                conn,
+                """
+                SELECT COUNT(*) as cnt
+                FROM events
+                WHERE system = ? AND event_type = 'llm_invoke' AND timestamp > ?
+            """,
+                (s, window),
+            )
+            if rows and rows[0]:
+                cnt = rows[0][0]
+                call_freq.append(
+                    {"system": s, "calls_5min": cnt, "calls_per_min": round(cnt / 5, 1)}
+                )
+        call_freq.sort(key=lambda x: x["calls_5min"], reverse=True)
 
-    # === API 调用频率（最近 5 分钟，按系统）===
-    call_freq = []
-    window = now - 300
-    for s in systems:
+        # === 哈希链完整性统计 ===
+        integrity_stats = {}
         rows = _safe_query(
             conn,
             """
-            SELECT COUNT(*) as cnt
+            SELECT integrity, COUNT(*) as cnt
             FROM events
-            WHERE system = ? AND event_type = 'llm_invoke' AND timestamp > ?
+            WHERE integrity IS NOT NULL AND integrity != 'pending'
+            GROUP BY integrity
         """,
-            (s, window),
         )
-        if rows and rows[0]:
-            cnt = rows[0][0]
-            call_freq.append(
-                {"system": s, "calls_5min": cnt, "calls_per_min": round(cnt / 5, 1)}
-            )
-    call_freq.sort(key=lambda x: x["calls_5min"], reverse=True)
+        for r in rows:
+            integrity_stats[r[0]] = r[1]
+        total_integrity = sum(integrity_stats.values())
+        integrity_stats["total"] = total_integrity
+        integrity_stats["rate"] = (
+            round(integrity_stats.get("verified", 0) / max(total_integrity, 1) * 100, 2)
+            if total_integrity > 0
+            else 100
+        )
+        # 记录 pending 数量供前端参考
+        pending_rows = _safe_query(
+            conn,
+            "SELECT COUNT(*) FROM events WHERE integrity = 'pending'",
+        )
+        if pending_rows and pending_rows[0] and pending_rows[0][0] > 0:
+            integrity_stats["pending"] = pending_rows[0][0]
 
-    # === 哈希链完整性统计 ===
-    integrity_stats = {}
-    rows = _safe_query(
-        conn,
-        """
-        SELECT integrity, COUNT(*) as cnt
-        FROM events
-        WHERE integrity IS NOT NULL AND integrity != 'pending'
-        GROUP BY integrity
-    """,
-    )
-    for r in rows:
-        integrity_stats[r[0]] = r[1]
-    total_integrity = sum(integrity_stats.values())
-    integrity_stats["total"] = total_integrity
-    integrity_stats["rate"] = (
-        round(integrity_stats.get("verified", 0) / max(total_integrity, 1) * 100, 2)
-        if total_integrity > 0
-        else 100
-    )
-    # 记录 pending 数量供前端参考
-    pending_rows = _safe_query(
-        conn,
-        "SELECT COUNT(*) FROM events WHERE integrity = 'pending'",
-    )
-    if pending_rows and pending_rows[0] and pending_rows[0][0] > 0:
-        integrity_stats["pending"] = pending_rows[0][0]
-
-    # === 容量指标 ===
-    db_size = DB.stat().st_size if DB.exists() else 0
-    event_count = 0
-    try:
-        event_count = conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
-    except sqlite3.OperationalError:
-        pass
-    hot_files = len(list(HOT.glob("*.jsonl"))) if HOT.exists() else 0
-    hot_size = 0
-    if HOT.exists():
-        for f in HOT.glob("*.jsonl"):
-            try:
-                hot_size += f.stat().st_size
-            except OSError:
-                pass
-
-    # 磁盘使用
-    try:
-        stat = os.statvfs(str(DB.parent))
-        disk_free_mb = (stat.f_bfree * stat.f_frsize) / (1024 * 1024)
-        disk_total_mb = (stat.f_blocks * stat.f_frsize) / (1024 * 1024)
-    except OSError:
-        disk_free_mb = 0
-        disk_total_mb = 0
-
-    capacity = {
-        "db_size_mb": round(db_size / (1024 * 1024), 1),
-        "db_size_limit_mb": 2048,
-        "event_count": event_count,
-        "event_count_limit": 1000000,
-        "disk_free_mb": round(disk_free_mb, 0),
-        "disk_total_mb": round(disk_total_mb, 0),
-        "hot_files": hot_files,
-        "hot_size_mb": round(hot_size / (1024 * 1024), 1),
-    }
-
-    # === 系统 PID 信息 ===
-    sys_pids = {}
-    for s in systems:
+        # === 容量指标 ===
+        db_size = DB.stat().st_size if DB.exists() else 0
+        event_count = 0
         try:
-            row = conn.execute(
-                """
-                SELECT pid, registered_at, last_seen, mode
-                FROM system_pid WHERE system = ? ORDER BY last_seen DESC LIMIT 1
-            """,
-                (s,),
-            ).fetchone()
-            if row:
-                sys_pids[s] = dict(row)
+            event_count = conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
         except sqlite3.OperationalError:
             pass
+        hot_files = len(list(HOT.glob("*.jsonl"))) if HOT.exists() else 0
+        hot_size = 0
+        if HOT.exists():
+            for f in HOT.glob("*.jsonl"):
+                try:
+                    hot_size += f.stat().st_size
+                except OSError:
+                    pass
 
-    # === OTEL 状态 ===
-    otel_status = _get_otel_status(conn, now)
+        # 磁盘使用
+        try:
+            stat = os.statvfs(str(DB.parent))
+            disk_free_mb = (stat.f_bfree * stat.f_frsize) / (1024 * 1024)
+            disk_total_mb = (stat.f_blocks * stat.f_frsize) / (1024 * 1024)
+        except OSError:
+            disk_free_mb = 0
+            disk_total_mb = 0
 
-    # === 动态分诊 ===
-    triage = _get_triage(conn, now)
-    per_system_triage = _get_per_system_triage(conn, systems)
+        capacity = {
+            "db_size_mb": round(db_size / (1024 * 1024), 1),
+            "db_size_limit_mb": 2048,
+            "event_count": event_count,
+            "event_count_limit": 1000000,
+            "disk_free_mb": round(disk_free_mb, 0),
+            "disk_total_mb": round(disk_total_mb, 0),
+            "hot_files": hot_files,
+            "hot_size_mb": round(hot_size / (1024 * 1024), 1),
+        }
 
-    # === 每系统诊断聚合 ===
-    diagnoses_by_system = {}
-    for d in diagnoses:
-        s = d.get("system", "unknown")
-        if s not in diagnoses_by_system:
-            diagnoses_by_system[s] = {"total": 0, "P0": 0, "P1": 0, "P2": 0}
-        diagnoses_by_system[s]["total"] += 1
-        sev = d.get("severity", "P2")
-        if sev in ("P0", "P1", "P2"):
-            diagnoses_by_system[s][sev] += 1
+        # === 系统 PID 信息 ===
+        sys_pids = {}
+        for s in systems:
+            try:
+                row = conn.execute(
+                    """
+                    SELECT pid, registered_at, last_seen, mode
+                    FROM system_pid WHERE system = ? ORDER BY last_seen DESC LIMIT 1
+                """,
+                    (s,),
+                ).fetchone()
+                if row:
+                    sys_pids[s] = dict(row)
+            except sqlite3.OperationalError:
+                pass
 
-    # === v1.3: 疾病中心聚合 ===
-    disease_catalog = _load_disease_catalog()
-    remedies = _load_remedies()
-    diagnoses = _enrich_diagnoses(diagnoses, remedies)
+        # === OTEL 状态 ===
+        otel_status = _get_otel_status(conn, now)
 
-    dismissed = _load_dismissed_diseases()
-    archived = _load_archived_diseases()
-    resets = _load_health_resets()
+        # === 动态分诊 ===
+        triage = _get_triage(conn, now)
+        per_system_triage = _get_per_system_triage(conn, systems)
 
-    global_integrity_rate = integrity_stats.get("rate", 100) / 100.0
-    instance_cards = _build_instance_cards(
-        diagnoses,
-        systems,
-        health,
-        sys_pids,
-        global_integrity_rate,
-        dismissed,
-        archived,
-        resets,
-        per_system_triage,
-    )
-    disease_distribution = _build_disease_distribution(disease_catalog, instance_cards)
+        # === 每系统诊断聚合 ===
+        diagnoses_by_system = {}
+        for d in diagnoses:
+            s = d.get("system", "unknown")
+            if s not in diagnoses_by_system:
+                diagnoses_by_system[s] = {"total": 0, "P0": 0, "P1": 0, "P2": 0}
+            diagnoses_by_system[s]["total"] += 1
+            sev = d.get("severity", "P2")
+            if sev in ("P0", "P1", "P2"):
+                diagnoses_by_system[s][sev] += 1
 
-    global_level, global_label = _calc_global_health_level(instance_cards)
-    healthy_count = sum(1 for c in instance_cards if c["health_level"] == "healthy")
-    total_active_faults = set()
-    total_p0 = total_p1 = total_p2 = 0
-    for c in instance_cards:
-        for dx in c["diagnoses"]:
-            if dx.get("status") == "false_positive":
-                continue
-            fid = dx.get("fault_id", "")
-            if fid not in total_active_faults:
-                total_active_faults.add(fid)
-                sev = dx.get("severity", "")
-                if sev == "P0":
-                    total_p0 += 1
-                elif sev == "P1":
-                    total_p1 += 1
-                elif sev == "P2":
-                    total_p2 += 1
+        # === v1.3: 疾病中心聚合 ===
+        disease_catalog = _load_disease_catalog()
+        remedies = _load_remedies()
+        diagnoses = _enrich_diagnoses(diagnoses, remedies)
 
-    global_summary = {
-        "total_instances": len(instance_cards),
-        "healthy_count": healthy_count,
-        "unhealthy_count": len(instance_cards) - healthy_count,
-        "total_active_diseases": len(total_active_faults),
-        "total_p0": total_p0,
-        "total_p1": total_p1,
-        "total_p2": total_p2,
-        "health_level": global_level,
-        "health_level_label": global_label,
-        "integrity_rate": integrity_stats.get("rate", 100),
-        "triage_ready": triage.get("covered", 0),
-        "triage_total": triage.get("total_diseases", 157),
-        "exported_ago_seconds": 0,
-    }
+        dismissed = _load_dismissed_diseases()
+        archived = _load_archived_diseases()
+        resets = _load_health_resets()
 
-    conn.close()
+        global_integrity_rate = integrity_stats.get("rate", 100) / 100.0
+        instance_cards = _build_instance_cards(
+            diagnoses,
+            systems,
+            health,
+            sys_pids,
+            global_integrity_rate,
+            dismissed,
+            archived,
+            resets,
+            per_system_triage,
+        )
+        disease_distribution = _build_disease_distribution(
+            disease_catalog, instance_cards
+        )
+
+        global_level, global_label = _calc_global_health_level(instance_cards)
+        healthy_count = sum(1 for c in instance_cards if c["health_level"] == "healthy")
+        total_active_faults = set()
+        total_p0 = total_p1 = total_p2 = 0
+        for c in instance_cards:
+            for dx in c["diagnoses"]:
+                if dx.get("status") == "false_positive":
+                    continue
+                fid = dx.get("fault_id", "")
+                if fid not in total_active_faults:
+                    total_active_faults.add(fid)
+                    sev = dx.get("severity", "")
+                    if sev == "P0":
+                        total_p0 += 1
+                    elif sev == "P1":
+                        total_p1 += 1
+                    elif sev == "P2":
+                        total_p2 += 1
+
+        global_summary = {
+            "total_instances": len(instance_cards),
+            "healthy_count": healthy_count,
+            "unhealthy_count": len(instance_cards) - healthy_count,
+            "total_active_diseases": len(total_active_faults),
+            "total_p0": total_p0,
+            "total_p1": total_p1,
+            "total_p2": total_p2,
+            "health_level": global_level,
+            "health_level_label": global_label,
+            "integrity_rate": integrity_stats.get("rate", 100),
+            "triage_ready": triage.get("covered", 0),
+            "triage_total": triage.get("total_diseases", 157),
+            "exported_ago_seconds": 0,
+        }
 
     # === 自举健康 ===
     self_health = _get_self_health(now)

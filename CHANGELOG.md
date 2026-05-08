@@ -1,5 +1,36 @@
 # Changelog
 
+## [v0.11.12.post8] — 2026-05-08
+
+### Fixed
+- P0: archiver_triage.py `run_diagnosis_async()` 无限创建线程（threading.Lock 门控 + 5秒节流）
+- P1: cli_report.py 4处 SQLite 连接泄漏（conn 未赋值进 finally / except 太窄 / close 在 try 内 / conn2 泄漏）
+- P1: probe_uni.py `attach()` 无去重，同 PID 创建多个轮询线程（_attached_pids set 去重）
+- P2: lit_lite.py `diagnose()` 270行无 try/finally 保护连接
+- P2: web_exporter.py `export()` 530行用 contextlib.closing 保护连接
+
+### Added
+- README 中英文末尾加测试阶段/Beta 免责声明
+
+## [v0.11.12.post7] — 2026-05-08
+
+### Fixed
+- 前端不显示 Hermes 卡片：`KNOWN_PROBES` 硬编码三处且缺少 `hermes`
+  - 新建 `src/probes.py` 统一定义 `KNOWN_PROBES` 和 `is_known_probe()`
+  - `is_known_probe()` 支持 `_` 和 `-` 前缀匹配（兼容 `hermes-agent`）
+  - `web_exporter.py`、`server.py`、`cli_report.py` 统一 import 共享模块
+
+## [v0.11.12.post6] — 2026-05-08
+
+### Fixed
+- 发布包缺少 `extensions/hermes/` 目录（Hermes 插件文件未打入 wheel）
+  - `pyproject.toml` packages 列表添加 `extensions` 和 `extensions.hermes`
+  - `extensions/__init__.py` 创建（使目录成为合法 Python 包）
+  - `MANIFEST.in` 全局排除 `__pycache__` 和 `extensions/langchain/dist/`
+
+### Added
+- `scripts/verify_wheel.py`: 构建后自动校验 wheel 包完整性（关键文件 + 目录 + 禁止文件）
+
 ## [v0.11.12.post5] — 2026-05-07
 
 ### Fixed

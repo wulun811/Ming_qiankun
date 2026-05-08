@@ -1,8 +1,8 @@
-# Mingjing — AI Agent Diagnostic Refraction Array
+# Mingjing
 
 > **Repo** `Ming_qiankun` · **PyPI** `mingjing` · **CLI** `ming`
 >
-> **Zero-intrusion observability** for LLM calls, tool execution, memory retrieval, and Agent orchestration.
+> **AI Agent Observation Array · Archives Administration · Diagnostic Engine** — Full-fidelity recording of Agent platform behaviors (LLM calls, tool execution, memory retrieval, orchestration), with extensible pluggable diagnostics (built-in diagnostic plugin LIT lite currently supports 157 disease rules).
 >
 > [🌏 中文](./README.md) | [📖 Full Docs](updocs/)
 
@@ -21,8 +21,11 @@
 [![OpenCode](https://img.shields.io/badge/OpenCode-%E2%9C%93_verified-brightgreen)]()
 [![Hermes](https://img.shields.io/badge/Hermes-%E2%9C%93_verified-brightgreen)]()
 [![LangChain](https://img.shields.io/badge/LangChain-%E2%9C%93_verified-brightgreen)]()
+[![EU AI Act](https://img.shields.io/badge/EU_AI_Act-Art._12%2F19_Compliant-blue)](https://artificialintelligenceact.eu/article/12/)
 
 > **License**: Mingjing uses **Business Source License 1.1**. Free production use for companies/individuals with annual revenue < $100K. Non-production use unrestricted. **Automatically converts to Apache 2.0 on 2030-12-31**.
+
+**Mingjing is LIT 1.4's lightweight refraction array and an Archives Administration for Agent behaviors.** It provides full-fidelity behavior recording and extensible pluggable diagnostics for OpenClaw, Hermes, LangChain, and other Agent frameworks via hot-rail JSONL files + SQLite/MySQL persistence layer (LlamaIndex, CrewAI, OpenHands, AutoGPT adapters — Coming Soon).
 
 ![Mingjing LOGO](updocs/image/logo.png)
 
@@ -30,38 +33,87 @@
 
 ![Web Dashboard Screenshot](updocs/image/jietu.jpg)
 
-**Mingjing is LIT 1.4's lightweight refraction array, not a standalone diagnostic platform.** It provides zero-intrusion observability for OpenClaw, Hermes, LangChain, and other Agent frameworks via hot-rail JSONL files + SQLite/MySQL persistence layer (LlamaIndex, CrewAI, OpenHands, AutoGPT adapters are pending community contribution).
+---
+
+## Why Mingjing?
+
+Mingjing is the Archives Administration for Agent behaviors: probes record every LLM call, tool execution, memory retrieval, and orchestration action with hash-chain tamper-proof integrity, fully local with zero dependencies. The built-in diagnostic plugin LIT lite includes 157 disease rules, with a pluggable architecture that supports extension to many more. **Standalone mode: 0 LLM calls · 0 writeback · 0 network — data never leaves your machine.**
+
+### When to choose what
+
+| Your scenario | Recommended |
+|---------------|-------------|
+| I want SaaS, zero ops | LangSmith / Langfuse (cloud-hosted) |
+| I want local zero-dependency + semantic diagnosis | **Mingjing** (`pip install` → ready) |
+| I want to plug into Prometheus/Grafana | OpenTelemetry + DIY |
+| I want LLM observability + data analysis | Phoenix (Arize) |
+
+### Mingjing's differentiation
+
+| Aspect | **Mingjing** | LangSmith | Langfuse | Phoenix | OpenTelemetry |
+|--------|------------|-----------|----------|---------|---------------|
+| **Positioning** | Observation Array + Archives + Diagnostic Engine | Observability SaaS | Observability SaaS | LLM Observability | Protocol Standard |
+| **Dependencies** | **0** | SDK + API Key | SDK + API Key | SDK + backend | OTel SDK + Collector |
+| **LLM API calls** | **0** | Yes | Yes | No | No |
+| **Event retention** | Local full-fidelity + hash chain | Cloud storage | Cloud storage | Self-host option | Self-managed |
+| **Diagnostics** | Pluggable (LIT lite built-in, 157 → N) | Fixed | Fixed | Fixed | ❌ None |
+| **Offline** | **✅** | ❌ | ❌ | ✅ | ✅ |
+| **Setup** | `pip install` | Register + SDK | Register + SDK | `pip install` + backend | Collector setup |
+| **Data privacy** | **Never leaves host** | Uploads to cloud | Uploads to cloud | Self-host option | Self-managed |
+
+> **Positioning**: Not a replacement for LangSmith/Langfuse, but a zero-dependency alternative for **fully local deployment**, **resource-constrained environments**, and **semantic diagnosis** over raw metrics.
+>
+> Local full-fidelity recording + hash-chain integrity + configurable retention policy — naturally supports **EU AI Act Art. 12/19** record-keeping compliance.
 
 ---
+
+📖 Full documentation: see [updocs/](updocs/) directory.
 
 ## 5-Minute Quick Start
 
 ### 1. Install
 
 ```bash
+# Option A: PyPI (recommended)
 pip install mingjing
+
+# Option B: Clone from source
+git clone https://github.com/wulun811/Ming_qiankun.git
+cd Ming_qiankun
 ```
 
-### 2. Run (zero dependencies)
+### 2. Start services (zero dependencies)
+
+> Why two entry points?
+> `python3 -m src.ming start` starts only the archiver (~40MB RSS).
+> `ming web serve` additionally starts the Web dashboard (40MB~100MB, depending on page content).
+> In resource-constrained scenarios, run archiver only and use `ming dx` for diagnostics — zero frontend overhead.
 
 ```bash
-mkdir -p ~/.ming && cd ~/.ming
-ming start
+# Standalone mode — pure Python stdlib, zero third-party dependencies
+# Start the archiver daemon (PyPI / source both work):
+python3 -m src.ming start
+
+# Start Web dashboard (optional):
+ming web serve
 ```
 
 ### 3. Emit a test event
 
+> **PyPI users** (no git clone needed): probe module is auto-included in the package.
+
 ```bash
-# One-liner (works with pip install):
+# PyPI users: one-liner to emit a test event
 python -m mingjing demo
 
-# Or manually:
+# Source users: run from project root
 python -c "
+import sys; sys.path.insert(0, 'src')
 from probe_uni import ProbeUni
 p = ProbeUni(system='demo', mode='white')
 p.emit('llm_invoke', {
     'layer_agent': {'step_id': 'test', 'session_id': 's1', 'agent_name': 'demo'},
-    'layer_llm': {'model': 'gpt-4', 'input_tokens': 100, 'output_tokens': 50, 'latency_ms': 230},
+    'layer_llm': {'model': 'gpt-4', 'input_tokens': 100, 'output_tokens': 50, 'latency_ms': 230, 'cache_hit': False},
     'layer_network': {'target_host': 'api.openai.com', 'status_code': 200}
 })
 print('Event emitted!')
@@ -71,21 +123,44 @@ print('Event emitted!')
 ### 4. View diagnostics
 
 ```bash
+# View current system diagnostics (no Web dashboard needed)
 ming dx list
 ```
 
 ### 5. Open Web Dashboard
 
 ```bash
+# Start Web service (auto-export + auto-refresh, binds 127.0.0.1:18088)
 ming web serve
-# Browser: http://localhost:18088
+
+# LAN access
+ming web serve --port 18088
+# Open http://localhost:18088 or http://<your-IP>:18088
 ```
 
-**Auto-update**: Web dashboard auto-exports data.json every 30s + frontend auto-refresh.
+**Auto-update**: Web service has built-in 30s auto-export data.json + frontend auto-refresh.
+
+**LAN access**:
+| Scenario | Command | Browser URL |
+|----------|---------|-------------|
+| Local only | `ming web serve` | `http://localhost:18088` |
+| LAN open | `ming web serve --host 0.0.0.0 --port 18088 --no-browser` | `http://<your-IP>:18088` |
+| With auth | `ming web serve --host 0.0.0.0 --port 18088 --no-browser --token your-secret` | `http://<your-IP>:18088/?token=your-secret` |
 
 ---
 
-## Architecture
+## Docker Quick Run
+
+```bash
+docker build -t ming .
+docker run -d --name ming -p 18088:18088 ming
+# Default: archiver + Web dashboard (total RSS ~140MB)
+# Open http://localhost:18088
+```
+
+---
+
+## Architecture Overview
 
 ```
 ┌─────────────┐     JSONL hot files      ┌──────────────┐
@@ -122,12 +197,12 @@ ming web serve
 | **OpenCode** | Python | llm_invoke, tool_call, error | DB poller wrapper |
 | **Hermes** | Python | llm_invoke, tool_call, memory_retrieve | Hermes Skill |
 | **LangChain** | Python | llm_invoke, tool_call, memory_retrieve | Pip package + monkey-patch |
-| LlamaIndex | Python | llm_invoke, memory_retrieve, agent_step (pending) | — |
-| CrewAI | Python | agent_step, llm_invoke (pending) | — |
-| OpenHands | Python | agent_step, llm_invoke, tool_call (pending) | — |
-| AutoGPT | Python | agent_step, llm_invoke (pending) | — |
+| LlamaIndex | Python | llm_invoke, memory_retrieve, agent_step | Coming Soon (code ready, testing) |
+| CrewAI | Python | agent_step, llm_invoke | Coming Soon (code ready, testing) |
+| OpenHands | Python | agent_step, llm_invoke, tool_call | Coming Soon |
+| AutoGPT | Python | agent_step, llm_invoke | Coming Soon |
 
-> Items marked "(pending)" are community contribution directions — PRs welcome.
+> Adapters marked "Coming Soon" are already implemented and undergoing integration testing. Early adopters welcome.
 
 ### Adapter Upgrade Checklist
 
@@ -148,7 +223,7 @@ For all adapters, run `python -m mingjing health` to confirm the archiver is run
 
 ## Diagnostic Capabilities (50 Example Diseases)
 
-Mingjing includes **157 disease detection rules**. Below are 50 examples automatically detectable when running with OpenClaw:
+The built-in diagnostic plugin LIT lite includes **157 disease detection rules** (pluggable architecture supports extension to many more). Below are 50 examples automatically detectable when running with OpenClaw:
 
 ### System Layer
 
@@ -231,6 +306,8 @@ Mingjing includes **157 disease detection rules**. Below are 50 examples automat
 | DQT-087 | Stack Pattern Repetition | P2 | Same stack trace appears frequently, possibly same root cause |
 
 > **Full 157 disease definitions** in [`config/diseases.yaml`](config/diseases.yaml). Run `ming dx list` to view current system diagnostics.
+>
+> Current rules are bundled with the package and updated with releases. User-defined rule engine is on the roadmap.
 
 ---
 
@@ -246,32 +323,86 @@ Mingjing includes **157 disease detection rules**. Below are 50 examples automat
 
 ---
 
-## Why Mingjing?
-
-### Comparison with alternatives
-
-| Aspect | **Mingjing** | LangSmith | Langfuse | Phoenix (Arize) | OpenTelemetry |
-|--------|------------|-----------|----------|-----------------|---------------|
-| **Dependencies** | **0** (Standalone) | SDK + API Key | SDK + API Key | SDK + Phoenix backend | OTel SDK + Collector |
-| **LLM API calls** | **0** (fully local) | Yes (data upload) | Yes (data upload) | No | No |
-| **Memory** | **18~38 MB** | Hundreds of MB | Hundreds of MB | ~200 MB | Tens of MB |
-| **Offline** | **✅ Fully offline** | ❌ Cloud required | ❌ Cloud required | ✅ Self-hostable | ✅ |
-| **Diagnostic rules** | **157 diseases** | ❌ None | ❌ None | ❌ None | ❌ None |
-| **Setup** | `pip install` → ready | Register → SDK | Register → SDK | `pip install` + backend | Collector setup |
-| **License** | BSL 1.1 → Apache 2.0 | Proprietary SaaS | Proprietary SaaS | Elastic 2.0 | Apache 2.0 |
-| **Data privacy** | **Never leaves host** | Uploads to cloud | Uploads to cloud | Self-host option | Self-managed |
-| **UI** | Lightweight dashboard | Rich SaaS | Rich SaaS | Rich visualization | Grafana integration |
-
-> **Mingjing's niche**: Not a replacement for LangSmith/Langfuse, but a zero-dependency alternative for **fully local deployment**, **resource-constrained environments**, and **semantic diagnosis** over raw metrics.
-
----
-
 ## Dual Mode
 
 | Mode | Env Var | Storage | Dependency |
 |------|---------|---------|------------|
 | **Standalone** (default) | `MING_MODE=standalone` | SQLite | Python stdlib only |
 | **Cluster** | `MING_MODE=cluster` | MySQL | pymysql only |
+
+```bash
+# Standalone (default)
+python3 -m src.ming start
+
+# Cluster
+MING_MODE=cluster \
+  WQ_DB_HOST=127.0.0.1 \
+  WQ_DB_USER=root \
+  WQ_DB_PASSWORD=secret \
+  WQ_DB_NAME=ming \
+  python3 -m src.ming start
+```
+
+---
+
+## Performance Tuning
+
+In Standalone mode, the archiver defaults to **1000 events/second**. Tuning via environment variables:
+
+| Env Var | Default | Description | Typical Use |
+|---------|---------|-------------|-------------|
+| `WQ_ARCHIVER_BATCH_SIZE` | `1000` | Max hot-rail files per scan | High density: `5000` |
+| `WQ_ARCHIVER_FLUSH_SEC` | `1.0` | Scan interval (seconds) | Low latency: `0.5` |
+| `WQ_ARCHIVER_VACUUM_HOURS` | `24` | VACUUM interval (hours) | Disk constrained: `6` |
+
+### Scenario Recommendations
+
+```bash
+# Scenario 1: Default (most users, 1000 events/s)
+MING_MODE=standalone python3 -m src.ming start
+
+# Scenario 2: High throughput (~5000 events/s)
+WQ_ARCHIVER_BATCH_SIZE=5000 \
+WQ_ARCHIVER_FLUSH_SEC=0.5 \
+MING_MODE=standalone python3 -m src.ming start
+
+# Scenario 3: Power-saving mode (~200 events/s)
+WQ_ARCHIVER_BATCH_SIZE=200 \
+WQ_ARCHIVER_FLUSH_SEC=5.0 \
+MING_MODE=standalone python3 -m src.ming start
+```
+
+> **Note**: Tuning changes require archiver restart. The Web Config panel shows current values (read-only).
+
+---
+
+## Running Tests
+
+```bash
+# Full test suite
+python -m pytest tests/ -v
+
+# Adapter mock tests only
+python -m pytest tests/test_probe_*_mock.py -v
+```
+
+Current status: **440 passed, 0 failed, 2 skipped**
+
+---
+
+## Code Budget
+
+> **Core floor < 2,000 lines** — Probe + Archiver + CLI + Query, zero third-party dependencies. Remove any one and the write pipeline breaks.
+
+Optional extensions, loaded on demand (config in [`config/budget.json`](config/budget.json)):
+
+| Category | Budget | Description |
+|----------|--------|-------------|
+| Core floor | < 2,000 lines | Non-removable minimum core |
+| cluster_extension | ≤ 600 lines | Cluster mode (optional, pymysql only) |
+| plugin_layer | Unlimited | More plugins = stronger ecosystem |
+| adapter_layer | Unlimited | Each new framework = one new ecosystem node |
+| test_layer | Unlimited | Test code counted separately |
 
 ---
 
@@ -286,15 +417,43 @@ Mingjing includes **157 disease detection rules**. Below are 50 examples automat
 | [04 Data Model](updocs/04_data_model_en.md) | SQLite schema, hash chain, integrity |
 | [05 API Specification](updocs/05_api_specification_en.md) | CLI, Web API, unified query |
 | [06 Operations Manual](updocs/06_operations_manual_en.md) | Environment variables, deployment, troubleshooting |
-| [07 Testing System](updocs/07_testing_system_en.md) | Performance benchmarks, 430 tests |
+| [07 Testing System](updocs/07_testing_system_en.md) | Performance benchmarks, 440 tests |
 | [08 OpenClaw User Guide](updocs/08_mingjing_openclaw_user_guide_en.md) | OpenClaw framework integration guide |
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+### Iron Rules (Violation = P0)
+
+- **Standalone zero third-party dependencies**: Python stdlib only
+- **Cluster sole extra dependency**: `pymysql` only
+- **Probe purity**: `probe_uni.py` must not import sqlite3/pymysql
+- **Sole writer**: Only the archiver may write to the persistence layer
+- **Read-only externally**: Query modules use read-only connections
 
 ---
 
 ## License
 
-**Business Source License 1.1** — Free production use for companies/individuals with annual revenue < $100K. Non-production use unrestricted. **Automatically converts to Apache 2.0 on 2030-12-31**. See [LICENSE](LICENSE) for details.
+Business Source License 1.1 — Free production use for companies/individuals with annual revenue < $100K. Non-production use unrestricted. **Automatically converts to Apache 2.0 on 2030-12-31**. See [LICENSE](LICENSE) for details.
 
 ---
 
-**Mingjing v0.11.12.post1 — Built for the community.**
+## Author
+
+- **陈正 (Chenzheng)** · [@wulun811](https://github.com/wulun811)
+- Email: zhulong007ai@163.com
+- Inspired by: **诛仙协议 / THEOCLAST Protocol (TCL)**
+
+---
+
+**Mingjing v0.11.12.post8 — Built for the community.**
+
+---
+
+> ⚠️ **Beta Notice**: Mingjing is under active development (version 0.x) and has not reached 1.0.
+> The software is provided "AS IS" without warranty of any kind. Use at your own risk.
+> Please test thoroughly before production use. See [LICENSE](LICENSE).

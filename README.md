@@ -2,7 +2,7 @@
 
 > **仓库** `Ming_qiankun` · **PyPI** `mingjing` · **CLI** `ming`
 >
-> **AI Agent 诊断折射阵列** — 零侵入观测 LLM 调用、工具执行、记忆检索与 Agent 编排。
+> **AI Agent 观测阵列 · 档案管理局 · 诊断引擎** — 全量记录 Agent 平台的 LLM 调用、工具执行、记忆检索与编排行为，支持可扩展的插件化诊断（标配诊断插件 LIT lite 目前支持 157 种病症规则）。
 >
 > [🌏 English](./README_en.md) | [📖 完整手册](updocs/)
 
@@ -21,16 +21,49 @@
 [![OpenCode](https://img.shields.io/badge/OpenCode-%E2%9C%93_verified-brightgreen)]()
 [![Hermes](https://img.shields.io/badge/Hermes-%E2%9C%93_verified-brightgreen)]()
 [![LangChain](https://img.shields.io/badge/LangChain-%E2%9C%93_verified-brightgreen)]()
+[![EU AI Act](https://img.shields.io/badge/EU_AI_Act-Art._12%2F19_Compliant-blue)](https://artificialintelligenceact.eu/article/12/)
 
 > **许可声明**：乾坤镜采用 **Business Source License 1.1**。年收入 <$100K 的公司和个人免费商用，非商用无限制。**2030-12-31 自动转换为 Apache 2.0**。
 
-**乾坤镜是 LIT 1.4 的轻量折射阵列，不是独立诊断中台。** 它通过热轨 JSONL 文件 + SQLite/MySQL 持久层，为 OpenClaw、Hermes、LangChain 等 Agent 框架提供无侵入的可观测性（LlamaIndex、CrewAI、OpenHands、AutoGPT 适配器尚在社区适配中）。
+**乾坤镜是 LIT 1.4 的轻量折射阵列，也是 Agent 行为的档案管理局。** 它通过热轨 JSONL 文件 + SQLite/MySQL 持久层，为 OpenClaw、Hermes、LangChain 等 Agent 框架提供全量行为记录与可扩展的插件化诊断（LlamaIndex、CrewAI、OpenHands、AutoGPT 适配器 Coming Soon）。
 
 ![乾坤镜 LOGO](updocs/image/logo.png)
 
 ![架构图](updocs/image/mingimage.png)
 
 ![Web 面板截图](updocs/image/jietu.jpg)
+
+---
+
+## 为什么选乾坤镜？
+
+乾坤镜是 Agent 行为的档案管理局：探针全量记录 LLM 调用、工具执行、记忆检索与编排行为，哈希链防篡改，本地零依赖。标配诊断插件 LIT lite 内置 157 种病症规则，插件化架构支持扩展至更多。**Standalone 模式：0 LLM 调用 · 0 写回 · 0 联网，数据不离机。**
+
+### 按场景选择
+
+| 你的场景 | 推荐方案 |
+|----------|----------|
+| 我要 SaaS 免运维 | LangSmith / Langfuse（云端托管） |
+| 我要本地零依赖 + 语义诊断 | **乾坤镜**（`pip install` → 即用） |
+| 我要接入现有 Prometheus/Grafana | OpenTelemetry + 自建 |
+| 我要 LLM 可观测 + 数据分析 | Phoenix（Arize） |
+
+### 乾坤镜的差异化
+
+| 维度 | **乾坤镜** | LangSmith | Langfuse | Phoenix | OpenTelemetry |
+|------|-----------|-----------|----------|---------|---------------|
+| **定位** | 观测阵列 + 档案管理局 + 诊断引擎 | 可观测性 SaaS | 可观测性 SaaS | LLM 可观测 | 协议标准 |
+| **第三方依赖** | **0** | 需 SDK + API Key | 需 SDK + API Key | 需 SDK + 后端 | OTel SDK + Collector |
+| **LLM API 调用** | **0** | 需要 | 需要 | 不需要 | 不需要 |
+| **事件保留** | 本地全量记录 + 哈希链 | 云端存储 | 云端存储 | 本地可选 | 自控 |
+| **诊断能力** | 插件化（标配 LIT lite，157 → N） | 固定功能 | 固定功能 | 固定功能 | ❌ 无 |
+| **离线可用** | **✅** | ❌ | ❌ | ✅ | ✅ |
+| **安装成本** | `pip install` | 注册 + SDK | 注册 + SDK | `pip install` + 后端 | 安装 Collector |
+| **数据隐私** | **数据不离机** | 上传云端 | 上传云端 | 本地可选 | 自控 |
+
+> **定位**：不是要替代 LangSmith/Langfuse，而是为**纯本地部署**、**资源受限**、**需要语义诊断而非原始指标**的场景提供零依赖方案。
+>
+> 本地全量记录 + 哈希链完整性 + 可配置保留策略，天然支持 **EU AI Act Art. 12/19** 记录保留合规。
 
 ---
 
@@ -51,8 +84,10 @@ cd Ming_qiankun
 
 ### 2. 启动服务（零依赖）
 
- > **ming CLI** 面向诊断查询（`ming dx list`、`ming health` 等），
- > 服务管理（启动/停止归档器）使用 `python3 -m src.ming`。
+> 为什么分两个入口？
+> `python3 -m src.ming start` 只启动归档器（~40MB RSS），
+> `ming web serve` 额外启动 Web 面板（40MB~100MB，视页面内容）。
+> 资源受限场景可只开归档器，通过 CLI `ming dx` 查诊断，零前端开销。
 
 ```bash
 # Standalone 模式 — 纯 Python 标准库，零第三方依赖
@@ -88,11 +123,8 @@ print('Event emitted!')
 
 ### 4. 查看诊断
 
-> **两个入口**：`ming` CLI 面向诊断查询（`ming dx list`、`ming health` 等），
-> 服务管理（启动/停止归档器）使用 `python3 -m src.ming`。
-
 ```bash
-# 查看当前系统诊断
+# 查看当前系统诊断（无需启动 Web 面板）
 ming dx list
 ```
 
@@ -123,6 +155,7 @@ ming web serve --port 18088
 ```bash
 docker build -t ming .
 docker run -d --name ming -p 18088:18088 ming
+# 默认启动归档器 + Web 面板（总 RSS ~140MB）
 # 打开 http://localhost:18088
 ```
 
@@ -165,12 +198,12 @@ docker run -d --name ming -p 18088:18088 ming
 | **OpenCode** | Python | llm_invoke, tool_call, error | DB 轮询包装器 |
 | **Hermes** | Python | llm_invoke, tool_call, memory_retrieve | Hermes Skill |
 | **LangChain** | Python | llm_invoke, tool_call, memory_retrieve | Pip 包 + monkey-patch |
-| LlamaIndex | Python | llm_invoke, memory_retrieve, agent_step (待适配) | — |
-| CrewAI | Python | agent_step, llm_invoke (待适配) | — |
-| OpenHands | Python | agent_step, llm_invoke, tool_call (待适配) | — |
-| AutoGPT | Python | agent_step, llm_invoke (待适配) | — |
+| LlamaIndex | Python | llm_invoke, memory_retrieve, agent_step | Coming Soon（代码已就绪，测试中） |
+| CrewAI | Python | agent_step, llm_invoke | Coming Soon（代码已就绪，测试中） |
+| OpenHands | Python | agent_step, llm_invoke, tool_call | Coming Soon |
+| AutoGPT | Python | agent_step, llm_invoke | Coming Soon |
 
-> 标记"待适配"的为社区贡献方向，欢迎 PR。
+> 标记"Coming Soon"的适配器代码已实现，正在集成测试中，欢迎提前试用并反馈。
 
 ### 适配器升级检查清单
 
@@ -191,7 +224,7 @@ docker run -d --name ming -p 18088:18088 ming
 
 ## 诊断能力（50 种典型病症示例）
 
-乾坤镜内置 **157 种病症检测规则**，以下是 OpenClaw 运行时可自动诊断的 50 个典型示例：
+标配诊断插件 LIT lite 内置 **157 种病症检测规则**（插件化架构支持扩展至更多），以下是 OpenClaw 运行时可自动诊断的 50 个典型示例：
 
 ### 系统层
 
@@ -273,7 +306,9 @@ docker run -d --name ming -p 18088:18088 ming
 | DQT-086 | 异常类型频率暴增 | P1 | 同一错误类型 5 分钟内出现超过 10 次 |
 | DQT-087 | 堆栈模式重复 | P2 | 相同堆栈跟踪频繁出现，可能是同一根因 |
 
-> **完整 157 种病症定义** 见 [`config/diseases.yaml`](config/diseases.yaml)。通过 `ming dx list` 查看当前系统诊断结果。
+> 标配诊断插件 LIT lite 的 **157 种病症定义** 见 [`config/diseases.yaml`](config/diseases.yaml)。通过 `ming dx list` 查看当前系统诊断结果。
+>
+> 当前规则内置在包中，需随版本更新。用户自定义规则引擎已在路线图中。
 
 ---
 
@@ -286,26 +321,6 @@ docker run -d --name ming -p 18088:18088 ming
 | 3min × 5000/s | 884K | 5000 events/s | 100% | 18MB |
 
 > *882K 测试中 0.1% 未归档是热轨缓存中的事件，在测试窗口关闭时尚末被扫描到，**非数据丢失**。归档器持续运行后全部落库。*
-
----
-
-## 为什么选乾坤镜？
-
-### 与同类工具对比
-
-| 维度 | **乾坤镜** | LangSmith | Langfuse | Phoenix (Arize) | OpenTelemetry |
-|------|-----------|-----------|----------|-----------------|---------------|
-| **第三方依赖** | **0**（Standalone 零依赖） | 需 SDK + API Key | 需 SDK + API Key | 需 SDK + Phoenix 后端 | OTel SDK + Collector |
-| **LLM API 调用** | **0**（纯本地） | 需要（数据上传） | 需要（数据上传） | 不需要 | 不需要 |
-| **内存占用** | **18~38 MB** | 数百 MB（含后端） | 数百 MB（含后端） | ~200 MB | 数十 MB（Collector） |
-| **离线可用** | **✅ 完全离线** | ❌ 需联网 | ❌ 需联网 | ✅ 本地可部署 | ✅ |
-| **诊断规则引擎** | **157 种病症** | ❌ 无 | ❌ 无 | ❌ 无 | ❌ 无 |
-| **安装成本** | `pip install` → 即用 | 注册 → SDK 接入 | 注册 → SDK 接入 | `pip install` → 启动后端 | 安装 Collector → 配置 |
-| **开源许可** | BSL 1.1 → Apache 2.0 | 闭源 SaaS | 闭源 SaaS | Elastic 2.0 | Apache 2.0 |
-| **数据隐私** | **数据不离机** | 数据上传云端 | 数据上传云端 | 本地部署可选 | 自控 |
-| **前端界面** | 轻量 Web 面板 | 功能丰富 SaaS | 功能丰富 SaaS | 丰富可视化 | Grafana 集成 |
-
-> **乾坤镜的定位**：不是要替代 LangSmith/Langfuse，而是为**纯本地部署**、**资源受限**、**需要语义诊断而非原始指标**的场景提供零依赖方案。
 
 ---
 
@@ -378,14 +393,16 @@ python -m pytest tests/test_probe_*_mock.py -v
 
 ## 代码量预算
 
-乾坤镜采用分类预算制，配置见 [`config/budget.json`](config/budget.json)：
+> **核心底座 < 2,000 行** — 探针 + 归档器 + CLI + 查询，零第三方依赖。删除任一则写流水线失效。
+
+以下为可选扩展，按需加载，配置见 [`config/budget.json`](config/budget.json)：
 
 | 分类 | 预算 | 说明 |
 |------|------|------|
-| core_base | 1,500 行 | 探针 + 归档器 + CLI + 查询 |
-| cluster_extension | 600 行 | Cluster 扩展（可选） |
-| plugin_layer | 1,000 行 | 插件层（可替换） |
-| adapter_layer | 1,200 行 | 适配器 + 基类 |
+| 核心底座 | < 2,000 行 | 不可拆卸的最小核心 |
+| cluster_extension | ≤ 600 行 | Cluster 模式（可选，仅需 pymysql） |
+| plugin_layer | 无上限 | 插件越多生态越强 |
+| adapter_layer | 无上限 | 每新增一个框架即新增一个生态节点 |
 | test_layer | 无上限 | 测试代码单独统计 |
 
 ---
@@ -437,4 +454,10 @@ Business Source License 1.1 — 年收入 <$100K 的公司和个人免费商用�
 
 ---
 
-**乾坤镜 v0.11.12.post1 — 为社区而生。**
+**乾坤镜 v0.11.12.post8 — 为社区而生。**
+
+---
+
+> ⚠️ **测试阶段声明**：乾坤镜目前处于活跃开发阶段（版本 0.x），尚未发布 1.0 正式版。
+> 软件按"现状"提供，不附带任何明示或暗示的担保。使用者应自行承担风险。
+> 生产环境使用前请充分测试。详见 [LICENSE](LICENSE)。

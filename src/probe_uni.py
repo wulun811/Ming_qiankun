@@ -28,6 +28,7 @@ class ProbeUni:
     FLUSH_INTERVAL_MS = 200
     DISK_CHECK_INTERVAL_S = 5
     MAX_BATCH_SIZE = 1000
+    _attached_pids: set = set()
     MAX_PAYLOAD_SIZE = 1024 * 1024  # 1MB
 
     # 多进程共享 Lamport 时钟文件
@@ -319,6 +320,9 @@ class ProbeUni:
     @staticmethod
     def attach(pid: int, system_name: str = None):
         """黑盒模式：附加到已有进程，通过 /proc/{pid} 采集（Linux only）"""
+        if pid in ProbeUni._attached_pids:
+            return None
+        ProbeUni._attached_pids.add(pid)
         probe = ProbeUni(system=system_name or f"pid_{pid}", mode="black", pid=pid)
         probe._start_polling(pid)
         return probe
@@ -338,6 +342,7 @@ class ProbeUni:
                     self.emit(
                         "system_crash", {"pid": pid, "inferred": "process_vanished"}
                     )
+                    ProbeUni._attached_pids.discard(pid)
                     break
 
         threading.Thread(target=loop, daemon=True).start()

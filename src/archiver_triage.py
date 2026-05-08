@@ -4,6 +4,13 @@
 import threading
 import time
 
+# ---- 诊断并发控制 ----
+# 问题：run_diagnosis_async() 每次创建新线程，高事件频率下线程无限累积
+# 修复：threading.Lock 门控（同时最多1个）+ 时间节流（最小间隔5秒）
+_diagnosis_lock = threading.Lock()
+_last_diagnose_ts = 0.0
+_DIAGNOSE_INTERVAL = 5.0
+
 
 def trigger_triage(triage_running, snapshot_path, interval, log_fn):
     """检查是否需要运行分诊，如需要则后台启动"""
@@ -44,11 +51,29 @@ def _run_triage_async(triage_running, log_fn, snapshot_path):
 
 def run_diagnosis_async(log_fn=None):
     """后台触发轻量诊断（不阻塞主循环）"""
+    global _last_diagnose_ts
+    now = time.time()
+    if now - _last_diagnose_ts < _DIAGNOSE_INTERVAL:
+        return
+    if not _diagnosis_lock.acquire(False):
+        return
+    _last_diagnose_ts = now
     try:
         from lit_lite import diagnose
 
-        t = threading.Thread(target=diagnose, daemon=True)
+        t = threading.Thread(target=_run_diagnosis_safe, args=(diagnose,), daemon=True)
         t.start()
     except Exception:
+        _diagnosis_lock.release()
         if log_fn:
             log_fn("run_diagnosis_async failed")
+
+
+def _run_diagnosis_safe(diagnose_fn):
+    """包装诊断函数，确保锁释放 + 异常不逃逸"""
+    try:
+        diagnose_fn()
+    except Exception:
+        pass
+    finally:
+        _diagnosis_lock.release()

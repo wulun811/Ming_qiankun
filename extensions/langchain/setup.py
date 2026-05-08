@@ -9,7 +9,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 setup(
     name="ming-probe-langchain",
-    version="0.11.9.post2",
+    version="0.11.12.post8",
     description="乾坤镜 LangChain 自动探针 —— pip install 即插即用，零代码侵入",
     long_description=open(os.path.join(HERE, "README.md"), encoding="utf-8").read(),
     long_description_content_type="text/markdown",

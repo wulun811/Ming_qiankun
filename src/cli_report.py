@@ -220,6 +220,8 @@ def _cmd_monthly_report(year_month, json_output):
     if not DB.exists():
         print("DB not found")
         return
+    conn = None
+    conn2 = None
     try:
         conn = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
         conn.row_factory = sqlite3.Row
@@ -254,9 +256,10 @@ def _cmd_monthly_report(year_month, json_output):
                         print(json.dumps(result, indent=2, ensure_ascii=False))
                     else:
                         _fmt_month_report(year_month, rows2)
-                conn2.close()
                 return
     finally:
+        if conn2:
+            conn2.close()
         if conn:
             conn.close()
 
@@ -279,6 +282,7 @@ def cmd_report(args):
     # === 查询诊断 ===
     diagnoses = []
     if DB.exists():
+        conn = None
         try:
             conn = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
             conn.execute("PRAGMA busy_timeout=5000")
@@ -299,7 +303,8 @@ def cmd_report(args):
         except sqlite3.OperationalError:
             diagnoses = []
         finally:
-            conn.close()
+            if conn:
+                conn.close()
 
     if not diagnoses and not getattr(args, "json", False):
         period = f"近 {days} 天" if days > 1 else "近 24 小时"
@@ -379,6 +384,7 @@ def cmd_report(args):
 
     # 补充只有事件、无诊断的系统（仅限 KNOWN_PROBES 中的探针 + mingjing）
     if DB.exists():
+        conn = None
         try:
             conn = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
             conn.execute("PRAGMA busy_timeout=5000")
@@ -411,13 +417,16 @@ def cmd_report(args):
                         "dismissed_count": 0,
                         "archived_count": 0,
                     }
-            conn.close()
         except sqlite3.OperationalError:
             pass
+        finally:
+            if conn:
+                conn.close()
 
     # === 探针时间（每系统最新事件距今） ===
     probe_times = {}
     if DB.exists():
+        conn = None
         try:
             conn = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
             conn.execute("PRAGMA busy_timeout=5000")
@@ -429,10 +438,12 @@ def cmd_report(args):
                     probe_times[s] = now - row[0]
                 else:
                     probe_times[s] = -1
-            conn.close()
         except sqlite3.OperationalError:
             for s in cards:
                 probe_times[s] = -1
+        finally:
+            if conn:
+                conn.close()
 
     # === 分诊覆盖率 ===
     triage_total = 0
@@ -768,6 +779,7 @@ def _print_footprint():
     self_rss = _read_proc_rss(os.getpid())
     self_cpu = 0.0
     if DB.exists():
+        conn = None
         try:
             conn = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
             conn.execute("PRAGMA busy_timeout=3000")
@@ -777,24 +789,26 @@ def _print_footprint():
                 "WHERE e.event_type='platform_snapshot' "
                 "AND e.system='__host__' ORDER BY e.timestamp DESC LIMIT 1"
             ).fetchone()
-            conn.close()
             if row:
                 pl = resolve_payload(row)
                 if pl:
                     self_cpu = pl.get("cpu_percent", 0.0)
-        except sqlite3.OperationalError:
+        except Exception:
             pass
+        finally:
+            if conn:
+                conn.close()
     print(f"  {'mingjing':<20s} RSS {self_rss:>5.0f} MB   CPU {self_cpu:>5.1f}%")
 
     # 已注册系统
     if DB.exists():
+        conn = None
         try:
             conn = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
             conn.execute("PRAGMA busy_timeout=3000")
             rows = conn.execute(
                 "SELECT system, pid, mode FROM system_pid WHERE pid > 0 ORDER BY system"
             ).fetchall()
-            conn.close()
             for system, pid, mode in rows:
                 if system == "mingjing":
                     continue
@@ -803,5 +817,8 @@ def _print_footprint():
                 if rss > 0:
                     label = f"{system}(probe)" if mode == "black" else system
                     print(f"  {label:<20s} RSS {rss:>5.0f} MB   CPU {cpu:>5.1f}%")
-        except sqlite3.OperationalError:
+        except Exception:
             pass
+        finally:
+            if conn:
+                conn.close()

@@ -185,6 +185,10 @@ def cmd_exclude(args):
             return
         excluded.add(args.system)
         _save_excluded(excluded)
+        # 同步创建 .paused 文件（与 web 前端行为一致）
+        paused_dir = Path.home() / ".ming" / ".paused"
+        paused_dir.mkdir(parents=True, exist_ok=True)
+        (paused_dir / args.system).write_text("")
         print(f"已停止观察 {args.system}\n当前排除列表: {', '.join(sorted(excluded))}")
     elif args.action == "remove":
         if args.system not in excluded:
@@ -192,6 +196,10 @@ def cmd_exclude(args):
             return
         excluded.discard(args.system)
         _save_excluded(excluded)
+        # 同步删除 .paused 文件
+        paused_file = Path.home() / ".ming" / ".paused" / args.system
+        if paused_file.exists():
+            paused_file.unlink()
         print(
             f"已恢复观察 {args.system}\n"
             + (

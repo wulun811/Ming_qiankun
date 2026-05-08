@@ -14,4 +14,4 @@ except ImportError:
     MingHealthTool = None
 
 __all__ = ["init_langchain_probe", "get_health", "get_health_text", "MingHealthTool"]
-__version__ = "0.11.9m"
+__version__ = "0.11.12.post8"
