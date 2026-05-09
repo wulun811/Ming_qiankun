@@ -388,7 +388,7 @@ python -m pytest tests/ -v
 python -m pytest tests/test_probe_*_mock.py -v
 ```
 
-Current status: **440 passed, 0 failed, 2 skipped**
+Current status: **501 passed, 0 failed, 2 skipped**
 
 ---
 
@@ -419,7 +419,7 @@ Optional extensions, loaded on demand (config in [`config/budget.json`](config/b
 | [04 Data Model](updocs/04_data_model_en.md) | SQLite schema, hash chain, integrity |
 | [05 API Specification](updocs/05_api_specification_en.md) | CLI, Web API, unified query |
 | [06 Operations Manual](updocs/06_operations_manual_en.md) | Environment variables, deployment, troubleshooting |
-| [07 Testing System](updocs/07_testing_system_en.md) | Performance benchmarks, 440 tests |
+| [07 Testing System](updocs/07_testing_system_en.md) | Performance benchmarks, 501 tests |
 | [08 OpenClaw User Guide](updocs/08_mingjing_openclaw_user_guide_en.md) | OpenClaw framework integration guide |
 
 ---

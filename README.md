@@ -386,7 +386,7 @@ python -m pytest tests/ -v
 python -m pytest tests/test_probe_*_mock.py -v
 ```
 
-当前状态：**440 passed, 0 failed, 2 skipped**
+当前状态：**501 passed, 0 failed, 2 skipped**
 
 ---
 
