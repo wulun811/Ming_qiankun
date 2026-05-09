@@ -14,13 +14,15 @@
 [![Dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen)]()
 [![Efficiency](https://img.shields.io/badge/0_LLM_·_0_Writeback_·_RSS%3C50MB-brightgreen)]()
 [![Storage](https://img.shields.io/badge/212K_events-196MB-brightgreen)]()
-[![Compression](https://img.shields.io/badge/v0.11.12.post1_Compression-43%25-brightgreen)]()
+[![Compression](https://img.shields.io/badge/v0.11.13_Compression-43%25-brightgreen)]()
 [![PRs](https://img.shields.io/badge/PRs-welcome-orange)](https://github.com/wulun811/Ming_qiankun/pulls)
 
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-%E2%9C%93_verified-brightgreen)]()
 [![OpenCode](https://img.shields.io/badge/OpenCode-%E2%9C%93_verified-brightgreen)]()
 [![Hermes](https://img.shields.io/badge/Hermes-%E2%9C%93_verified-brightgreen)]()
 [![LangChain](https://img.shields.io/badge/LangChain-%E2%9C%93_verified-brightgreen)]()
+[![LlamaIndex](https://img.shields.io/badge/LlamaIndex-%E2%9C%93_verified-brightgreen)]()
+[![CrewAI](https://img.shields.io/badge/CrewAI-%E2%9C%93_verified-brightgreen)]()
 [![EU AI Act](https://img.shields.io/badge/EU_AI_Act-Art._12%2F19_Compliant-blue)](https://artificialintelligenceact.eu/article/12/)
 
 > **许可声明**：乾坤镜采用 **Business Source License 1.1**。年收入 <$100K 的公司和个人免费商用，非商用无限制。**2030-12-31 自动转换为 Apache 2.0**。
@@ -84,10 +86,7 @@ cd Ming_qiankun
 
 ### 2. 启动服务（零依赖）
 
-> 为什么分两个入口？
-> `python3 -m src.ming start` 只启动归档器（~40MB RSS），
-> `ming web serve` 额外启动 Web 面板（40MB~100MB，视页面内容）。
-> 资源受限场景可只开归档器，通过 CLI `ming dx` 查诊断，零前端开销。
+> **为什么分两个入口？** `python3 -m src.ming start` 只启动归档器（~40MB RSS），`ming web serve` 额外启动 Web 面板（40MB~100MB，视页面内容）。资源受限场景可只开归档器，通过 CLI `ming dx` 查诊断，零前端开销。
 
 ```bash
 # Standalone 模式 — 纯 Python 标准库，零第三方依赖
@@ -198,8 +197,8 @@ docker run -d --name ming -p 18088:18088 ming
 | **OpenCode** | Python | llm_invoke, tool_call, error | DB 轮询包装器 |
 | **Hermes** | Python | llm_invoke, tool_call, memory_retrieve | Hermes Skill |
 | **LangChain** | Python | llm_invoke, tool_call, memory_retrieve | Pip 包 + monkey-patch |
-| LlamaIndex | Python | llm_invoke, memory_retrieve, agent_step | Coming Soon（代码已就绪，测试中） |
-| CrewAI | Python | agent_step, llm_invoke | Coming Soon（代码已就绪，测试中） |
+| **LlamaIndex** | Python | llm_invoke, memory_retrieve, agent_step | Python 探针 |
+| **CrewAI** | Python | agent_step, llm_invoke | Python 探针 |
 | OpenHands | Python | agent_step, llm_invoke, tool_call | Coming Soon |
 | AutoGPT | Python | agent_step, llm_invoke | Coming Soon |
 
@@ -454,7 +453,7 @@ Business Source License 1.1 — 年收入 <$100K 的公司和个人免费商用�
 
 ---
 
-**乾坤镜 v0.11.12.post8 — 为社区而生。**
+**乾坤镜 v0.11.13 — 为社区而生。**
 
 ---
 

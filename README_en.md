@@ -14,13 +14,15 @@
 [![Dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen)]()
 [![Efficiency](https://img.shields.io/badge/0_LLM_·_0_Writeback_·_RSS%3C50MB-brightgreen)]()
 [![Storage](https://img.shields.io/badge/212K_events-196MB-brightgreen)]()
-[![Compression](https://img.shields.io/badge/v0.11.12.post1_Compression-43%25-brightgreen)]()
+[![Compression](https://img.shields.io/badge/v0.11.13_Compression-43%25-brightgreen)]()
 [![PRs](https://img.shields.io/badge/PRs-welcome-orange)](https://github.com/wulun811/Ming_qiankun/pulls)
 
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-%E2%9C%93_verified-brightgreen)]()
 [![OpenCode](https://img.shields.io/badge/OpenCode-%E2%9C%93_verified-brightgreen)]()
 [![Hermes](https://img.shields.io/badge/Hermes-%E2%9C%93_verified-brightgreen)]()
 [![LangChain](https://img.shields.io/badge/LangChain-%E2%9C%93_verified-brightgreen)]()
+[![LlamaIndex](https://img.shields.io/badge/LlamaIndex-%E2%9C%93_verified-brightgreen)]()
+[![CrewAI](https://img.shields.io/badge/CrewAI-%E2%9C%93_verified-brightgreen)]()
 [![EU AI Act](https://img.shields.io/badge/EU_AI_Act-Art._12%2F19_Compliant-blue)](https://artificialintelligenceact.eu/article/12/)
 
 > **License**: Mingjing uses **Business Source License 1.1**. Free production use for companies/individuals with annual revenue < $100K. Non-production use unrestricted. **Automatically converts to Apache 2.0 on 2030-12-31**.
@@ -197,8 +199,8 @@ docker run -d --name ming -p 18088:18088 ming
 | **OpenCode** | Python | llm_invoke, tool_call, error | DB poller wrapper |
 | **Hermes** | Python | llm_invoke, tool_call, memory_retrieve | Hermes Skill |
 | **LangChain** | Python | llm_invoke, tool_call, memory_retrieve | Pip package + monkey-patch |
-| LlamaIndex | Python | llm_invoke, memory_retrieve, agent_step | Coming Soon (code ready, testing) |
-| CrewAI | Python | agent_step, llm_invoke | Coming Soon (code ready, testing) |
+| **LlamaIndex** | Python | llm_invoke, memory_retrieve, agent_step | Python probe |
+| **CrewAI** | Python | agent_step, llm_invoke | Python probe |
 | OpenHands | Python | agent_step, llm_invoke, tool_call | Coming Soon |
 | AutoGPT | Python | agent_step, llm_invoke | Coming Soon |
 
@@ -450,7 +452,7 @@ Business Source License 1.1 — Free production use for companies/individuals wi
 
 ---
 
-**Mingjing v0.11.12.post8 — Built for the community.**
+**Mingjing v0.11.13 — Built for the community.**
 
 ---
 
