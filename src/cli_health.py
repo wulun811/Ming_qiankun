@@ -3,6 +3,9 @@
 import json, sqlite3, sys, time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent))
+from archiver_util import diagnoses_query
+
 
 def cmd_health(args):
     """健康状态查询"""
@@ -162,17 +165,15 @@ def cmd_status(args):
             conn.execute("PRAGMA busy_timeout=5000")
             conn.row_factory = sqlite3.Row
 
-            year = time.strftime("%Y")
-            tbl = f"diagnoses_{year}"
             now = time.time()
 
             systems_set = set()
             for r in conn.execute("SELECT DISTINCT system FROM events").fetchall():
                 systems_set.add(r[0])
             try:
-                for r in conn.execute(f"SELECT DISTINCT system FROM {tbl}").fetchall():
+                for r in diagnoses_query(conn, "DISTINCT system"):
                     systems_set.add(r[0])
-            except sqlite3.OperationalError:
+            except Exception:
                 pass
             systems = sorted(systems_set)
 
@@ -230,10 +231,10 @@ def cmd_status(args):
 
                 # 诊断（过滤忽略/归档）
                 try:
-                    dx_rows = conn.execute(
-                        f"SELECT severity, fault_id FROM {tbl} WHERE system = ?", (s,)
-                    ).fetchall()
-                except sqlite3.OperationalError:
+                    dx_rows = diagnoses_query(
+                        conn, "severity, fault_id", "system = ?", (s,)
+                    )
+                except Exception:
                     dx_rows = []
 
                 p0 = p1 = p2 = 0

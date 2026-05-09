@@ -81,7 +81,11 @@ def run_migrations(db_path, skip=False):
     # 执行迁移
     migration_files = sorted(MIGRATIONS_DIR.glob("*.sql"))
     for mf in migration_files:
-        version = int(mf.name.split("_")[0])
+        try:
+            version = int(mf.name.split("_")[0])
+        except (ValueError, IndexError):
+            print(f"[migrate] 跳过非标文件: {mf.name}")
+            continue
         if version <= current:
             continue
 

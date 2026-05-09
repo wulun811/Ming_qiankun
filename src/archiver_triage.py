@@ -61,7 +61,9 @@ def run_diagnosis_async(log_fn=None):
     try:
         from lit_lite import diagnose
 
-        t = threading.Thread(target=_run_diagnosis_safe, args=(diagnose,), daemon=True)
+        t = threading.Thread(
+            target=_run_diagnosis_safe, args=(diagnose, log_fn), daemon=True
+        )
         t.start()
     except Exception:
         _diagnosis_lock.release()
@@ -69,11 +71,12 @@ def run_diagnosis_async(log_fn=None):
             log_fn("run_diagnosis_async failed")
 
 
-def _run_diagnosis_safe(diagnose_fn):
+def _run_diagnosis_safe(diagnose_fn, log_fn=None):
     """包装诊断函数，确保锁释放 + 异常不逃逸"""
     try:
         diagnose_fn()
-    except Exception:
-        pass
+    except Exception as e:
+        if log_fn:
+            log_fn(f"diagnose failed: {e}")
     finally:
         _diagnosis_lock.release()

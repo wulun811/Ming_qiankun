@@ -64,11 +64,12 @@ class ClusterArchiver:
                 except Exception as e:
                     logger.error(f"daemon error: {e}")
                 time.sleep(self.flush_interval)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"daemon loop fatal: {e}")
 
     def tick(self):
         """定时调用：读热轨 → 缓冲 → 批量写入 → 心跳"""
+        self._replay_failed()
         new_events = self._read_hot_files()
         with self._lock:
             self._buffer.extend(new_events)
@@ -119,6 +120,16 @@ class ClusterArchiver:
                         inserted_files.add(sf)
                 self._buffer = self._buffer[result["inserted"] :]
             self._cleanup_staging(inserted_files)
+        elif result["failed"] > 0:
+            # 所有事件都失败并保存到 _failed/，清理对应的 staging 文件
+            failed_files = set()
+            with self._lock:
+                for evt in batch:
+                    sf = evt.get("_staging_file")
+                    if sf:
+                        failed_files.add(sf)
+                self._buffer = self._buffer[len(batch) :]
+            self._cleanup_staging(failed_files)
 
     def _cleanup_staging(self, inserted_files: set):
         """只删除已成功写入的 staging 文件"""
@@ -239,6 +250,7 @@ class ClusterArchiver:
         return {"inserted": 0, "failed": len(events), "fallback": len(events)}
 
     def _save_failed(self, evt: dict):
+        self.FAILED_DIR.mkdir(parents=True, exist_ok=True)
         ts = int(time.time() * 1000)
         uid = uuid.uuid4().hex[:8]
         filepath = (
@@ -246,6 +258,26 @@ class ClusterArchiver:
         )
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(evt, f, ensure_ascii=False)
+
+    def _replay_failed(self):
+        """尝试重放 _failed 目录中的事件"""
+        if not self.FAILED_DIR.is_dir():
+            return
+        failed_files = sorted(self.FAILED_DIR.glob("failed_*.json"))
+        if not failed_files:
+            return
+        replayed = 0
+        for fp in failed_files:
+            try:
+                evt = json.loads(fp.read_text(encoding="utf-8"))
+                with self._lock:
+                    self._buffer.append(evt)
+                fp.unlink()
+                replayed += 1
+            except Exception:
+                continue
+        if replayed:
+            logger.info(f"重放 {replayed} 条失败事件")
 
     def _heartbeat(self):
         """写入 MySQL 心跳表，供 Watchdog 查询"""

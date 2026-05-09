@@ -15,6 +15,7 @@ DISEASES_YAML = Path(__file__).parent.parent / "config" / "diseases.yaml"
 TRIAGE_SNAPSHOT = Path.home() / ".ming" / "triage_snapshot.json"
 
 from archiver_compress import resolve_payload
+from archiver_util import diagnoses_query
 
 try:
     from archiver_summary import summarize_month, load_monthly_summary
@@ -287,18 +288,17 @@ def cmd_report(args):
             conn = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
             conn.execute("PRAGMA busy_timeout=5000")
             conn.row_factory = sqlite3.Row
-            year = time.strftime("%Y")
-            tbl = f"diagnoses_{year}"
             try:
-                rows = conn.execute(
-                    f"SELECT diagnosis_id, system, fault_id, diagnosis_name, "
-                    f"confidence, severity, status, created_at "
-                    f"FROM {tbl} WHERE created_at > ? "
-                    f"ORDER BY created_at DESC",
+                rows = diagnoses_query(
+                    conn,
+                    "diagnosis_id, system, fault_id, diagnosis_name, "
+                    "confidence, severity, status, created_at",
+                    "created_at > ?",
                     (since,),
-                ).fetchall()
+                    "ORDER BY created_at DESC",
+                )
                 diagnoses = [dict(r) for r in rows]
-            except sqlite3.OperationalError:
+            except Exception:
                 diagnoses = []
         except sqlite3.OperationalError:
             diagnoses = []
@@ -775,8 +775,21 @@ def _proc_cpu(pid):
 def _print_footprint():
     print("── 📐 資源足跡 · Resource Footprint ──")
 
-    # 乾坤镜自身：RSS 直接读 /proc（瞬时，不走 ps），CPU 读探针空闲采样
-    self_rss = _read_proc_rss(os.getpid())
+    # 乾坤镜自身：读取归档器进程 RSS，离线时显示 0
+    archiver_pid = None
+    try:
+        pid_text = (Path.home() / ".ming" / "standalone.pid").read_text().strip()
+        pid = int(pid_text)
+        if Path(f"/proc/{pid}").exists():
+            archiver_pid = pid
+    except (OSError, ValueError):
+        pass
+
+    if archiver_pid:
+        self_rss = _read_proc_rss(archiver_pid)
+    else:
+        self_rss = 0
+
     self_cpu = 0.0
     if DB.exists():
         conn = None
@@ -798,7 +811,10 @@ def _print_footprint():
         finally:
             if conn:
                 conn.close()
-    print(f"  {'mingjing':<20s} RSS {self_rss:>5.0f} MB   CPU {self_cpu:>5.1f}%")
+    if archiver_pid:
+        print(f"  {'mingjing':<20s} RSS {self_rss:>5.0f} MB   CPU {self_cpu:>5.1f}%")
+    else:
+        print(f"  {'mingjing':<20s} RSS     0 MB   CPU   0.0%  (离线)")
 
     # 已注册系统
     if DB.exists():

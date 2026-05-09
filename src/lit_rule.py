@@ -29,6 +29,10 @@ DEADLINE_RULES = {"AGT-049", "MEM-074"}
 
 _last_triage_ts = 0.0
 
+# ---- diseases.yaml 缓存 ----
+_diseases_cache = None
+_diseases_cache_mtime = 0.0
+
 
 def set_incremental_since(ts: float):
     global _last_triage_ts
@@ -70,11 +74,19 @@ def load_triage_snapshot() -> dict:
 
 
 def load_diseases_yaml() -> list:
-    """零第三方依赖，使用内置 YAML 解析器"""
+    """零第三方依赖，使用内置 YAML 解析器（带 mtime 缓存）"""
+    global _diseases_cache, _diseases_cache_mtime
     if not DISEASES_YAML.exists():
         return None
     try:
-        return _parse_yaml_simple()
+        mtime = DISEASES_YAML.stat().st_mtime
+        if _diseases_cache is not None and mtime == _diseases_cache_mtime:
+            return _diseases_cache
+        result = _parse_yaml_simple()
+        if result is not None:
+            _diseases_cache = result
+            _diseases_cache_mtime = mtime
+        return result
     except Exception:
         return None
 

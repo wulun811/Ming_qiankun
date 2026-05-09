@@ -5,7 +5,7 @@ import os, json, time, sqlite3, hashlib, shutil, threading, gc, ctypes
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from archiver_schema import init_schema, init_diagnoses_table
+from archiver_schema import init_schema, init_diagnoses_table, check_wal_integrity
 from archiver_score import score_event
 from archiver_util import (
     write_heartbeat,
@@ -79,6 +79,11 @@ class Archiver:
         self.min_compress_bytes = MIN_COMPRESS_BYTES
         self._last_compress = 0
         self._last_summary_check = 0
+        # 缓存 ctypes.CDLL，避免每次调用都重新创建
+        try:
+            self._libc = ctypes.CDLL("libc.so.6")
+        except OSError:
+            self._libc = None  # musl libc (Alpine/Docker) or non-Linux
         self._scan_hot_dir()
 
     def _open_db(self, read_only=False, timeout=5):
@@ -92,6 +97,17 @@ class Archiver:
         return conn
 
     def _init_db(self):
+        # P0-NEW-3: 启动时检查 WAL/SHM 完整性
+        if not check_wal_integrity(str(self.DB)):
+            # 主数据库也损坏了，需要重建
+            self._log_error("数据库损坏，尝试重建")
+            try:
+                self.DB.unlink(missing_ok=True)
+                self.DB.with_suffix(".db-wal").unlink(missing_ok=True)
+                self.DB.with_suffix(".db-shm").unlink(missing_ok=True)
+            except OSError as e:
+                self._log_error(f"删除损坏数据库失败: {e}")
+
         conn = self._open_db()
         try:
             init_schema(conn)
@@ -183,8 +199,11 @@ class Archiver:
         if got_events:
             self._run_diagnosis()
         gc.collect()
-        _libc = ctypes.CDLL("libc.so.6")
-        _libc.malloc_trim(0)
+        if self._libc:
+            try:
+                self._libc.malloc_trim(0)
+            except Exception:
+                pass
         return total_events
 
     def _integrity_score(self, event):
@@ -458,7 +477,11 @@ class Archiver:
         self._last_backup = run_backup(str(self.DB), self._last_backup, self._log_error)
         if self._last_backup != old_last:
             gc.collect()
-            ctypes.CDLL("libc.so.6").malloc_trim(0)
+            if self._libc:
+                try:
+                    self._libc.malloc_trim(0)
+                except Exception:
+                    pass
 
     def _purge_expired_events(self):
         try:
@@ -536,17 +559,24 @@ class Archiver:
         if not batch:
             return
         conn.execute("BEGIN IMMEDIATE")
-        for blob, ev_id in batch:
-            conn.execute(
-                "INSERT INTO events_blob (event_id, payload_blob) VALUES (?, ?) "
-                "ON CONFLICT(event_id) DO UPDATE SET payload_blob = excluded.payload_blob",
-                (ev_id, blob),
-            )
-            conn.execute(
-                "UPDATE events SET payload = NULL, storage_tier = 1, compress_attempts = 0 WHERE id = ?",
-                (ev_id,),
-            )
-        conn.execute("COMMIT")
+        try:
+            for blob, ev_id in batch:
+                conn.execute(
+                    "INSERT INTO events_blob (event_id, payload_blob) VALUES (?, ?) "
+                    "ON CONFLICT(event_id) DO UPDATE SET payload_blob = excluded.payload_blob",
+                    (ev_id, blob),
+                )
+                conn.execute(
+                    "UPDATE events SET payload = NULL, storage_tier = 1, compress_attempts = 0 WHERE id = ?",
+                    (ev_id,),
+                )
+            conn.execute("COMMIT")
+        except Exception:
+            try:
+                conn.execute("ROLLBACK")
+            except Exception:
+                pass  # ROLLBACK 失败时不遮蔽原始异常
+            raise
 
     def _compress_old_events(self):
         now = time.time()
@@ -644,7 +674,10 @@ class Archiver:
         except Exception:
             pass
 
-        _libc = ctypes.CDLL("libc.so.6")
+        try:
+            _libc = ctypes.CDLL("libc.so.6")
+        except OSError:
+            _libc = None  # musl libc (Alpine/Docker) or non-Linux
 
         def loop():
             while self._alive:
@@ -656,6 +689,13 @@ class Archiver:
                     self._consecutive_errors += 1
                     self._log_error(e, self._consecutive_errors)
                     if self._consecutive_errors >= self._max_consecutive_errors:
+                        self._log_error(
+                            Exception(
+                                f"连续错误达 {self._max_consecutive_errors} 次，daemon 线程退出"
+                            ),
+                            0,
+                        )
+                        self._alive = False
                         break
                     backoff = min(self._consecutive_errors * self.FLUSH_INTERVAL, 30)
                     time.sleep(backoff)
@@ -664,8 +704,11 @@ class Archiver:
                 if self._trim_counter >= 60:
                     self._trim_counter = 0
                     gc.collect()
-                    _libc.malloc_trim(0)
+                    if _libc:
+                        _libc.malloc_trim(0)
+                    self._cleanup_stale_staging()
                 time.sleep(self.FLUSH_INTERVAL)
+            self._alive = False
 
         self._daemon_thread = threading.Thread(target=loop, daemon=True)
         self._daemon_thread.start()

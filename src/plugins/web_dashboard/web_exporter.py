@@ -10,6 +10,7 @@ _src = str(Path(__file__).parent.parent.parent)
 if _src not in sys.path:
     sys.path.insert(0, _src)
 from archiver_compress import resolve_payload
+from archiver_util import diagnoses_query
 
 
 def _get_excluded():
@@ -472,18 +473,31 @@ def _collect_footprint():
 
     # 1. 乾坤镜自身（归档器进程，不是 web 面板自身）
     archiver_pid = _read_archiver_pid()
-    mingjing_pid = archiver_pid if archiver_pid else os.getpid()
-    self_status = _read_proc_status(mingjing_pid)
-    if self_status:
+    if archiver_pid:
+        self_status = _read_proc_status(archiver_pid)
+        if self_status:
+            systems.append(
+                {
+                    "system": "mingjing",
+                    "rss_mb": self_status.get("rss_mb", 0),
+                    "vsz_mb": self_status.get("vsz_mb", 0),
+                    "cpu_pct": round(_proc_cpu_pct(archiver_pid), 1),
+                    "fd_count": _proc_fd_count(archiver_pid),
+                    "uptime_min": _proc_uptime_min(archiver_pid),
+                    "excluded": False,
+                }
+            )
+    else:
         systems.append(
             {
                 "system": "mingjing",
-                "rss_mb": self_status.get("rss_mb", 0),
-                "vsz_mb": self_status.get("vsz_mb", 0),
-                "cpu_pct": round(_proc_cpu_pct(mingjing_pid), 1),
-                "fd_count": _proc_fd_count(mingjing_pid),
-                "uptime_min": _proc_uptime_min(mingjing_pid),
+                "rss_mb": 0,
+                "vsz_mb": 0,
+                "cpu_pct": 0,
+                "fd_count": 0,
+                "uptime_min": 0,
                 "excluded": False,
+                "status": "offline",
             }
         )
 
@@ -506,7 +520,9 @@ def _collect_footprint():
 
     # 2. 已注册系统
     excluded = _get_excluded()
-    seen_pids = {web_pid, mingjing_pid}
+    seen_pids = {web_pid}
+    if archiver_pid:
+        seen_pids.add(archiver_pid)
     if DB.exists():
         try:
             conn = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
@@ -697,8 +713,6 @@ def export():
         return _write_empty_data()
 
     with closing(conn):
-        year = time.strftime("%Y")
-        tbl = f"diagnoses_{year}"
         now = time.time()
 
         # === 基础系统列表 ===
@@ -732,10 +746,13 @@ def export():
         try:
             since = time.time() - 86400
             diag_cols = "diagnosis_id, system, fault_id, diagnosis_name, confidence, severity, status, evidence_quality, created_at, evidence, inference_chain"
-            rows = conn.execute(
-                f"SELECT {diag_cols} FROM {tbl} WHERE created_at > ? ORDER BY created_at DESC LIMIT 200",
+            rows = diagnoses_query(
+                conn,
+                diag_cols,
+                "created_at > ?",
                 (since,),
-            ).fetchall()
+                "ORDER BY created_at DESC LIMIT 200",
+            )
             for r in rows:
                 d = dict(r)
                 # 构建 detail 对象（替代不存在的 detail 列）

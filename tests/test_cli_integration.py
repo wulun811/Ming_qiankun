@@ -10,6 +10,7 @@ if str(_src) not in sys.path:
 from cli_admin import _escape_like
 from cli import (
     _PREDEFINED_QUERIES,
+    _PREDEFINED_NON_DIAG,
     cmd_dx,
     main,
 )
@@ -32,27 +33,27 @@ class TestEscapeLike(unittest.TestCase):
 
 
 class TestPredefinedQueries(unittest.TestCase):
-    def test_recent_p0_has_placeholder(self):
-        sql = _PREDEFINED_QUERIES["recent_p0"]
-        self.assertIn("{year}", sql)
-        self.assertIn("?", sql)
+    def test_recent_p0_exists(self):
+        self.assertIn("recent_p0", _PREDEFINED_QUERIES)
 
-    def test_recent_p1_has_placeholder(self):
-        sql = _PREDEFINED_QUERIES["recent_p1"]
-        self.assertIn("{year}", sql)
-        self.assertIn("?", sql)
-
-    def test_event_stats_exists(self):
-        self.assertIn("event_stats", _PREDEFINED_QUERIES)
-
-    def test_system_stats_exists(self):
-        self.assertIn("system_stats", _PREDEFINED_QUERIES)
+    def test_recent_p1_exists(self):
+        self.assertIn("recent_p1", _PREDEFINED_QUERIES)
 
     def test_unconfirmed_exists(self):
         self.assertIn("unconfirmed", _PREDEFINED_QUERIES)
 
-    def test_all_queries_have_limit(self):
-        for name, sql in _PREDEFINED_QUERIES.items():
+    def test_diagnoses_queries_have_limit(self):
+        for name, val in _PREDEFINED_QUERIES.items():
+            self.assertIsInstance(val, tuple, f"Query {name} should be tuple")
+            self.assertEqual(len(val), 3, f"Query {name} should have 3 elements")
+            self.assertIn("?", val[2], f"Query {name} missing ? in order_limit")
+
+    def test_non_diag_queries_exist(self):
+        self.assertIn("event_stats", _PREDEFINED_NON_DIAG)
+        self.assertIn("system_stats", _PREDEFINED_NON_DIAG)
+
+    def test_non_diag_queries_have_limit(self):
+        for name, sql in _PREDEFINED_NON_DIAG.items():
             self.assertIn("?", sql, f"Query {name} missing ? placeholder")
 
 

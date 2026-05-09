@@ -45,7 +45,10 @@ def resolve_payload(
     if d.get(tier_col) == 1:
         blob = d.get(blob_col)
         if blob:
-            return decompress_payload(blob)
+            try:
+                return decompress_payload(blob)
+            except (zlib.error, json.JSONDecodeError, UnicodeDecodeError):
+                return None
         return None
     raw = d.get(payload_col)
     if raw:

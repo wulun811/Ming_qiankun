@@ -3,6 +3,9 @@
 import json, sqlite3, time, sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent))
+from archiver_util import diagnoses_query
+
 DB = Path.home() / ".ming" / "ming.db"
 DISMISSED_PATH = Path.home() / ".ming" / "dismissed_diseases.json"
 ARCHIVED_PATH = Path.home() / ".ming" / "archived_diseases.json"
@@ -222,12 +225,10 @@ def cmd_instance_list(args):
         pass
 
     # 从 diagnoses 表收集（可能有诊断但无事件的系统）
-    year = time.strftime("%Y")
-    tbl = f"diagnoses_{year}"
     try:
-        for r in conn.execute(f"SELECT DISTINCT system FROM {tbl}").fetchall():
+        for r in diagnoses_query(conn, "DISTINCT system"):
             systems_set.add(r[0])
-    except sqlite3.OperationalError:
+    except Exception:
         pass
 
     systems = sorted(systems_set)

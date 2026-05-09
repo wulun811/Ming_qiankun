@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mingjing"
-version = "0.11.12.post8"
+version = "0.11.13"
 description = "乾坤镜 — AI Agent 诊断折射阵列"
 license = "BUSL-1.1"
 license-files = ["LICENSE"]

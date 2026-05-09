@@ -203,6 +203,16 @@ def diagnose():
 
         diseases = load_diseases_yaml()
         if diseases is None:
+            write_dx(
+                "all",
+                "META-006",
+                "diseases.yaml 加载失败",
+                0.95,
+                "META",
+                [{"summary": "规则文件不存在或解析失败，诊断引擎无法工作"}],
+                "请检查 config/diseases.yaml 是否存在且格式正确",
+                "diseases_load_failed",
+            )
             (OUT / ".plugin_heartbeat").write_text(str(now))
             return
 

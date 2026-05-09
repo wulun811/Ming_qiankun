@@ -1,7 +1,7 @@
 # config_loader.py —— v0.11.9m 配置加载器
 # 职责：config.json 加载 + 注释预处理 + 校验 + 环境变量合并
 # 纯标准库，零第三方依赖
-import json, os, re
+import json, os
 from pathlib import Path
 
 DEFAULTS = {
@@ -44,10 +44,50 @@ RANGES = {
 
 
 def _strip_comments(text):
-    """删除 JSON 中的 // 和 /* */ 注释"""
-    text = re.sub(r"//.*?$", "", text, flags=re.MULTILINE)
-    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
-    return text
+    """删除 JSON 中的 // 和 /* */ 注释（跳过字符串内的内容）"""
+    result = []
+    i = 0
+    in_string = False
+    escape = False
+    while i < len(text):
+        ch = text[i]
+        if escape:
+            result.append(ch)
+            escape = False
+            i += 1
+            continue
+        if in_string:
+            result.append(ch)
+            if ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            i += 1
+            continue
+        if ch == '"':
+            in_string = True
+            result.append(ch)
+            i += 1
+            continue
+        if ch == "/" and i + 1 < len(text):
+            next_ch = text[i + 1]
+            if next_ch == "/":
+                # line comment: skip to end of line
+                nl = text.find("\n", i)
+                if nl == -1:
+                    break
+                i = nl
+                continue
+            elif next_ch == "*":
+                # block comment: skip to */
+                end = text.find("*/", i + 2)
+                if end == -1:
+                    break
+                i = end + 2
+                continue
+        result.append(ch)
+        i += 1
+    return "".join(result)
 
 
 def _find_config():
@@ -120,13 +160,15 @@ def load_config():
         val = os.getenv(env_var)
         if val is not None:
             # 类型转换
-            if isinstance(_get_nested(DEFAULTS, config_path), bool):
+            default_val = _get_nested(DEFAULTS, config_path)
+            if isinstance(default_val, bool):
                 val = val.lower() in ("true", "1", "yes")
-            elif isinstance(_get_nested(DEFAULTS, config_path), (int, float)):
+            elif isinstance(default_val, (int, float)):
                 try:
                     val = float(val) if "." in val else int(val)
-                except Exception:
-                    pass
+                except (ValueError, TypeError):
+                    print(f"[config] 环境变量 {env_var}={val!r} 非数字，忽略")
+                    continue
             _set_nested(overrides, config_path, val)
             print(f"[config] 环境变量 {env_var} 覆盖 {config_path}")
     config = _deep_merge(config, overrides)
@@ -148,6 +190,9 @@ def validate(config):
     for path, (min_val, max_val) in RANGES.items():
         val = _get_nested(config, path)
         if val is not None:
+            if not isinstance(val, (int, float)):
+                errors.append(f"{path}={val!r} 类型错误，应为数字")
+                continue
             if not (min_val <= val <= max_val):
                 errors.append(f"{path}={val} 超出范围 [{min_val}-{max_val}]")
     mode = config.get("mode")

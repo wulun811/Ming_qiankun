@@ -1,8 +1,81 @@
 # archiver_schema.py —— 0.11.10 数据库 Schema 初始化
 # 职责：CREATE TABLE / INDEX 语句（一次性的 DDL）
 # 安全：仅使用标准库，conn 由 archiver.py 传入
+import os
 import time
 import sqlite3
+
+
+def check_wal_integrity(db_path: str) -> bool:
+    """检查 WAL/SHM 文件完整性，损坏时尝试恢复
+
+    返回: True 如果数据库正常或已恢复, False 如果需要重建
+    """
+    from pathlib import Path
+
+    db = Path(db_path)
+    wal = db.with_suffix(".db-wal")
+    shm = db.with_suffix(".db-shm")
+
+    # 如果没有 WAL 文件，数据库是干净的
+    if not wal.exists():
+        return True
+
+    # 检查 WAL 文件大小是否合理（不能为 0 或异常大）
+    try:
+        wal_size = wal.stat().st_size
+        if wal_size == 0:
+            # WAL 文件为空，删除它
+            wal.unlink(missing_ok=True)
+            shm.unlink(missing_ok=True)
+            return True
+    except OSError:
+        # 无法读取 WAL 文件状态，尝试删除
+        try:
+            wal.unlink(missing_ok=True)
+            shm.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return True
+
+    # 尝试打开数据库并执行 WAL checkpoint 来验证完整性
+    try:
+        conn = sqlite3.connect(str(db))
+        conn.execute("PRAGMA busy_timeout = 1000")
+        # 尝试读取数据库来验证一致性
+        conn.execute("SELECT count(*) FROM sqlite_master")
+        # 尝试 WAL checkpoint
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        conn.close()
+        return True
+    except sqlite3.DatabaseError:
+        # WAL 损坏，尝试恢复
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+        # 删除损坏的 WAL 和 SHM 文件
+        try:
+            wal.unlink(missing_ok=True)
+            shm.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+        # 再次尝试打开数据库
+        try:
+            conn = sqlite3.connect(str(db))
+            conn.execute("PRAGMA busy_timeout = 1000")
+            conn.execute("SELECT count(*) FROM sqlite_master")
+            conn.close()
+            return True
+        except sqlite3.DatabaseError:
+            # 主数据库也损坏了
+            try:
+                conn.close()
+            except Exception:
+                pass
+            return False
 
 
 def init_diagnoses_table(cursor, year=None):

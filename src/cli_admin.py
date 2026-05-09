@@ -408,3 +408,57 @@ def _cmd_probe_uninstall(DB, HOT, COLD, PAUSED, args):
         if deleted_files:
             parts.append(f"{deleted_files} 文件")
         print(f"\n卸载完成: {' / '.join(parts)}")
+
+
+def cmd_known_probes(args):
+    """管理已知探针列表：list / add / remove / discover"""
+    from probes import (
+        add_known_probe,
+        remove_known_probe,
+        list_known_probes,
+        auto_discover_probes,
+    )
+
+    action = args.action
+
+    if action == "list":
+        info = list_known_probes()
+        print("\n  已知探针（三层合并）:")
+        print(f"    内置默认:    {', '.join(info['default'])}")
+        print(f"    用户自定义:  {', '.join(info['user']) or '(空)'}")
+        print(f"    自动发现:    {', '.join(info['auto_discovered']) or '(空)'}")
+        print(f"\n  合并结果（{len(info['merged'])} 个）: {', '.join(info['merged'])}")
+
+    elif action == "add":
+        name = getattr(args, "name", None)
+        if not name:
+            print("错误: 需要 --name 参数")
+            sys.exit(1)
+        if add_known_probe(name):
+            print(f"已添加 '{name}' 到已知探针列表")
+        else:
+            print(f"'{name}' 已在用户配置中")
+
+    elif action == "remove":
+        name = getattr(args, "name", None)
+        if not name:
+            print("错误: 需要 --name 参数")
+            sys.exit(1)
+        if remove_known_probe(name):
+            print(f"已从用户配置移除 '{name}'")
+        else:
+            print(f"'{name}' 不在用户配置中")
+
+    elif action == "discover":
+        print("正在扫描归档库 + 热轨...")
+        discovered = auto_discover_probes()
+        info = list_known_probes(discovered=discovered)
+        new_probes = discovered - set(info["merged"])
+        print(
+            f"\n  已发现 {len(discovered)} 个探针: {', '.join(sorted(discovered)) or '(无)'}"
+        )
+        if new_probes:
+            print(f"\n  新发现（未在已知列表中）: {', '.join(sorted(new_probes))}")
+            print("  运行 'ming known-probes add --name <名称>' 添加到已知列表")
+        else:
+            print("\n  所有发现的探针已在已知列表中")

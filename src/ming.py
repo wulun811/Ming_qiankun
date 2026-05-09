@@ -199,7 +199,10 @@ def start_standalone():
     signal.signal(signal.SIGTERM, _graceful_shutdown)
     signal.signal(signal.SIGINT, _graceful_shutdown)
 
-    _libc = ctypes.CDLL("libc.so.6")
+    try:
+        _libc = ctypes.CDLL("libc.so.6")
+    except OSError:
+        _libc = None  # musl libc (Alpine/Docker) or non-Linux
     _trim_counter = 0
 
     try:
@@ -209,8 +212,11 @@ def start_standalone():
             if _trim_counter >= 300:
                 _trim_counter = 0
                 gc.collect()
-                _libc.malloc_trim(0)
-            if not _archiver._alive:
+                if _libc:
+                    _libc.malloc_trim(0)
+            if not _archiver._alive or (
+                _archiver._daemon_thread and not _archiver._daemon_thread.is_alive()
+            ):
                 now = time.time()
                 if now - last_restart < restart_cooldown:
                     restart_count += 1
@@ -275,12 +281,45 @@ def start_cluster():
     _archiver.start_daemon()
     _log(f"ClusterArchiver 已启动，PID={os.getpid()}")
 
+    # 主进程监控归档器健康（与 standalone 模式一致）
+    restart_count = 0
+    max_restarts = 10
+    restart_cooldown = 60
+    last_restart = 0
+
     signal.signal(signal.SIGTERM, _graceful_shutdown)
     signal.signal(signal.SIGINT, _graceful_shutdown)
 
     try:
+        _libc = ctypes.CDLL("libc.so.6")
+    except OSError:
+        _libc = None
+    _trim_counter = 0
+
+    try:
         while True:
             time.sleep(1)
+            _trim_counter += 1
+            if _trim_counter >= 300:
+                _trim_counter = 0
+                gc.collect()
+                if _libc:
+                    _libc.malloc_trim(0)
+            if not _archiver._alive or (
+                _archiver._daemon_thread and not _archiver._daemon_thread.is_alive()
+            ):
+                now = time.time()
+                if now - last_restart < restart_cooldown:
+                    restart_count += 1
+                    if restart_count >= max_restarts:
+                        _log("归档器重启次数过多，退出")
+                        break
+                else:
+                    restart_count = 1
+                last_restart = now
+                _log(f"归档器已停止，正在重启... (第{restart_count}次)")
+                _archiver._alive = True
+                _archiver.start_daemon()
     except KeyboardInterrupt:
         _graceful_shutdown()
 

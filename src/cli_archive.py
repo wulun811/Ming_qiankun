@@ -4,6 +4,9 @@ import json, hashlib, sys, time
 from pathlib import Path
 import sqlite3
 
+sys.path.insert(0, str(Path(__file__).parent))
+from archiver_util import diagnoses_query
+
 
 def cmd_archive(args):
     archive_dir = Path.home() / ".ming" / "archive"
@@ -62,12 +65,8 @@ def cmd_verify(args):
     conn = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
     conn.execute("PRAGMA busy_timeout=5000")
     try:
-        year = time.strftime("%Y")
-        tbl = f"diagnoses_{year}"
         try:
-            rows = conn.execute(
-                f"SELECT diagnosis_id, evidence, evidence_hash FROM {tbl}"
-            ).fetchall()
+            rows = diagnoses_query(conn, "diagnosis_id, evidence, evidence_hash")
             ok = 0
             bad = 0
             for diag_id, evidence, stored_hash in rows:

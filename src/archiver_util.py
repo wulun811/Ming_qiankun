@@ -24,7 +24,12 @@ def log_error(error_log_path, error, consecutive_count=0):
         with open(error_log_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     except Exception:
-        pass
+        try:
+            import sys
+
+            print(f"[archiver] log_error failed: {error}", file=sys.stderr)
+        except Exception:
+            pass
 
 
 def run_vacuum(db_path, last_vacuum, vacuum_interval):
@@ -33,7 +38,19 @@ def run_vacuum(db_path, last_vacuum, vacuum_interval):
     if now - last_vacuum < vacuum_interval:
         return None
     db = Path(db_path)
-    before = db.stat().st_size
+    try:
+        before = db.stat().st_size
+    except OSError:
+        return None
+    # VACUUM 需要约 2x DB 大小的磁盘空间
+    try:
+        import shutil
+
+        free = shutil.disk_usage(str(db.parent)).free
+        if free < before * 2:
+            return None  # 磁盘空间不足，跳过
+    except Exception:
+        pass
     try:
         conn = sqlite3.connect(str(db))
         conn.execute("PRAGMA busy_timeout=5000")
@@ -41,7 +58,10 @@ def run_vacuum(db_path, last_vacuum, vacuum_interval):
         conn.close()
     except Exception:
         return None
-    after = db.stat().st_size
+    try:
+        after = db.stat().st_size
+    except OSError:
+        return None
     return before - after
 
 
@@ -52,3 +72,35 @@ def update_expectation(cursor, system, expected_event):
         "UPDATE expectations SET fulfilled = 1 WHERE system = ? AND expected_event = ? AND fulfilled = 0",
         (system, expected_event),
     )
+
+
+def diagnoses_query(conn, columns, where="", params=(), order_limit=""):
+    """跨年查询 diagnoses 表，自动发现所有 diagnoses_{year} 表并 UNION ALL。
+    返回 rows。解决年份边界（1月1日）去年数据不可见的问题。"""
+    try:
+        tables = [
+            r[0]
+            for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'diagnoses_%'"
+            ).fetchall()
+        ]
+    except Exception:
+        tables = []
+    if not tables:
+        # fallback: 至少查当前年
+        tables = [f"diagnoses_{time.strftime('%Y')}"]
+    tables.sort(reverse=True)  # 最新年份优先
+    parts = []
+    all_params = []
+    for tbl in tables:
+        w = f" WHERE {where}" if where else ""
+        parts.append(f"SELECT {columns} FROM {tbl}{w}")
+        all_params.extend(params)  # 每个子查询都需要自己的参数
+    sql = " UNION ALL ".join(parts)
+    if order_limit:
+        sql = f"SELECT * FROM ({sql}) _diag {order_limit}"
+    try:
+        rows = conn.execute(sql, tuple(all_params)).fetchall()
+        return rows
+    except Exception:
+        return []

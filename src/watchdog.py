@@ -268,6 +268,9 @@ class PassiveWatchdog:
                 }
             )
             self._restart_attempts = 0  # 重置重启计数
+        else:
+            # alive 状态：重置重启计数，确保恢复后计数器归零
+            self._restart_attempts = 0
 
         # 检查 2：自健康指标（archiver_lag）
         try:

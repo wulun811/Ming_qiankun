@@ -6,10 +6,10 @@
 >
 > [🌏 中文](./README.md) | [📖 Full Docs](updocs/)
 
-[![PyPI](https://img.shields.io/pypi/v/mingjing?color=blue)](https://pypi.org/project/mingjing/)
+[![Version](https://img.shields.io/badge/v0.11.13-blue)](https://pypi.org/project/mingjing/)
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-440%2F0%2F2-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-501%2F0%2F2-brightgreen)]()
 
 [![Dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen)]()
 [![Efficiency](https://img.shields.io/badge/0_LLM_·_0_Writeback_·_RSS%3C50MB-brightgreen)]()

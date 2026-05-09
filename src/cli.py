@@ -9,10 +9,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 DB = Path.home() / ".ming" / "ming.db"
 
+from archiver_util import diagnoses_query
+
 from cli_report import cmd_report
 from cli_triage import cmd_triage
 from cli_health import cmd_health, cmd_self_check, cmd_status
-from cli_admin import cmd_admin, cmd_exclude, cmd_probe
+from cli_admin import cmd_admin, cmd_exclude, cmd_probe, cmd_known_probes
 from cli_archive import cmd_archive, cmd_verify
 from cli_ops import cmd_skill, cmd_config, cmd_web, cmd_hermes_install, cmd_service
 from cli_check_adapters import cmd_check_adapters
@@ -37,15 +39,26 @@ except ModuleNotFoundError:
 
 _PREDEFINED_QUERIES = {
     "recent_p0": (
-        "SELECT diagnosis_id, system, fault_id, diagnosis_name, "
-        "confidence, severity, created_at FROM diagnoses_{year} "
-        "WHERE severity = 'P0' ORDER BY created_at DESC LIMIT ?"
+        "diagnosis_id, system, fault_id, diagnosis_name, "
+        "confidence, severity, created_at",
+        "severity = 'P0'",
+        "ORDER BY created_at DESC LIMIT ?",
     ),
     "recent_p1": (
-        "SELECT diagnosis_id, system, fault_id, diagnosis_name, "
-        "confidence, severity, created_at FROM diagnoses_{year} "
-        "WHERE severity = 'P1' ORDER BY created_at DESC LIMIT ?"
+        "diagnosis_id, system, fault_id, diagnosis_name, "
+        "confidence, severity, created_at",
+        "severity = 'P1'",
+        "ORDER BY created_at DESC LIMIT ?",
     ),
+    "unconfirmed": (
+        "diagnosis_id, system, fault_id, diagnosis_name, "
+        "confidence, severity, status, created_at",
+        "status = 'pending'",
+        "ORDER BY created_at DESC LIMIT ?",
+    ),
+}
+
+_PREDEFINED_NON_DIAG = {
     "event_stats": (
         "SELECT event_type, COUNT(*) as cnt FROM events "
         "GROUP BY event_type ORDER BY cnt DESC LIMIT ?"
@@ -53,11 +66,6 @@ _PREDEFINED_QUERIES = {
     "system_stats": (
         "SELECT system, COUNT(*) as cnt FROM events "
         "GROUP BY system ORDER BY cnt DESC LIMIT ?"
-    ),
-    "unconfirmed": (
-        "SELECT diagnosis_id, system, fault_id, diagnosis_name, "
-        "confidence, severity, status, created_at FROM diagnoses_{year} "
-        "WHERE status = 'pending' ORDER BY created_at DESC LIMIT ?"
     ),
 }
 
@@ -74,21 +82,18 @@ def cmd_dx(args):
         limit = args.limit if args.limit is not None else 20
 
         if query_name in _PREDEFINED_QUERIES:
-            year = time.strftime("%Y")
-            sql = _PREDEFINED_QUERIES[query_name].replace("{year}", year)
+            columns, where, order_limit = _PREDEFINED_QUERIES[query_name]
             try:
-                rows = conn.execute(sql, (limit,)).fetchall()
+                rows = diagnoses_query(conn, columns, where, (limit,), order_limit)
                 if not rows:
                     severity = query_name.replace("recent_", "").upper()
                     if severity in ("P0", "P1"):
                         print(f"近 {limit} 条无 {severity} 诊断记录")
                     elif query_name == "unconfirmed":
                         print("无待确认的诊断")
-                    elif "stats" in query_name:
-                        print("无事件数据")
                     return
                 for r in rows:
-                    d = dict(r)
+                    d = dict(r) if hasattr(r, "keys") else dict(zip(r.keys(), r))
                     if "created_at" in d:
                         d["created_at"] = time.strftime(
                             "%Y-%m-%d %H:%M:%S", time.localtime(d["created_at"])
@@ -96,9 +101,25 @@ def cmd_dx(args):
                     print(json.dumps(d, ensure_ascii=False, default=str))
             except Exception as e:
                 print("查询出错: {}".format(e))
+        elif query_name in _PREDEFINED_NON_DIAG:
+            try:
+                rows = conn.execute(
+                    _PREDEFINED_NON_DIAG[query_name], (limit,)
+                ).fetchall()
+                if not rows:
+                    print("无事件数据")
+                    return
+                for r in rows:
+                    d = dict(r)
+                    print(json.dumps(d, ensure_ascii=False, default=str))
+            except Exception as e:
+                print("查询出错: {}".format(e))
         else:
             print("未知查询: {}".format(query_name))
-            print("可用查询: {}".format(", ".join(_PREDEFINED_QUERIES.keys())))
+            available = list(_PREDEFINED_QUERIES.keys()) + list(
+                _PREDEFINED_NON_DIAG.keys()
+            )
+            print("可用查询: {}".format(", ".join(available)))
     finally:
         conn.close()
 
@@ -349,6 +370,12 @@ def main():
         "--dry-run", action="store_true", help="预演模式（只显示不执行）"
     )
 
+    p_known = sub.add_parser(
+        "known-probes", help="管理已知探针列表（三层：内置/用户/自动发现）"
+    )
+    p_known.add_argument("action", choices=["list", "add", "remove", "discover"])
+    p_known.add_argument("--name", help="探针名称（add/remove 必需）")
+
     args = parser.parse_args()
     if not args.command:
         parser.print_help()
@@ -383,6 +410,7 @@ def main():
     cmds["service"] = cmd_service
     cmds["exclude"] = cmd_exclude
     cmds["probe"] = cmd_probe
+    cmds["known-probes"] = cmd_known_probes
     cmds[args.command](args)
 
 
