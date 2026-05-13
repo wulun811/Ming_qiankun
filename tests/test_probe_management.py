@@ -10,6 +10,7 @@ if str(_src) not in sys.path:
 from cli_admin import _cmd_probe_list, _cmd_probe_uninstall, _PROTECTED_SYSTEMS
 
 
+os.environ["MING_LANG"] = "zh"
 def _make_test_home(tmpdir):
     """创建隔离的 ~/.ming 目录结构并返回各路径"""
     home = Path(tmpdir) / "home"

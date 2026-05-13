@@ -5,34 +5,37 @@
 #   2. ~/.ming/.secrets 文件（K=V 格式，强制 chmod 600）
 # 出口：get_secret("key") — 只有这一个合法渠道获取凭据
 import os
+import threading
 from pathlib import Path
 
 VAULT_FILE = Path.home() / ".ming" / ".secrets"
 
 _loaded = False
 _cache: dict[str, str] = {}
+_lock = threading.Lock()
 
 
 def _load_vault():
     global _loaded, _cache
-    if _loaded:
-        return
-    _loaded = True
+    with _lock:
+        if _loaded:
+            return
 
-    if VAULT_FILE.exists():
-        try:
-            st = VAULT_FILE.stat()
-            if st.st_mode & 0o077:
-                VAULT_FILE.chmod(0o600)
-            for line in VAULT_FILE.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                if "=" in line:
-                    k, v = line.split("=", 1)
-                    _cache[k.strip()] = v.strip()
-        except Exception:
-            pass
+        if VAULT_FILE.exists():
+            try:
+                st = VAULT_FILE.stat()
+                if st.st_mode & 0o077:
+                    VAULT_FILE.chmod(0o600)
+                for line in VAULT_FILE.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if "=" in line:
+                        k, v = line.split("=", 1)
+                        _cache[k.strip()] = v.strip()
+            except Exception:
+                pass
+        _loaded = True
 
 
 def get_secret(key: str, default: str = "") -> str:

@@ -4,12 +4,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mingjing"
-version = "0.11.13"
+version = "0.11.14.post1"
 description = "乾坤镜 — AI Agent 诊断折射阵列"
 license = "BUSL-1.1"
 license-files = ["LICENSE"]
 readme = "README.md"
 requires-python = ">=3.10"
+
+[project.optional-dependencies]
+adapters = [
+    "semantic-kernel>=1.40.0,<1.42.0",
+    "agentscope>=1.0.18,<1.1.0",
+]
 
 [project.scripts]
 ming = "src.cli:main"
@@ -24,7 +30,7 @@ packages = [
 include-package-data = true
 
 [tool.setuptools.package-data]
-src = ["*.js", "*.go", "*.yaml", "*.html"]
+src = ["*.js", "*.go", "*.yaml", "*.html", "locales/**/*.mo", "locales/**/*.po"]
 "src.adapters" = ["*.js", "*.go"]
 "src.plugins.web_dashboard" = ["*.html", "*.yaml"]
 "src.plugins.lit_lite" = ["*.yaml"]

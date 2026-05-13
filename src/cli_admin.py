@@ -4,6 +4,7 @@ import json, os, sqlite3, sys, time
 from pathlib import Path
 
 from archiver_exclude import _load_excluded, _save_excluded
+from i18n import _
 
 _PROTECTED_SYSTEMS = {"__admin__", "__self_health__", "__host__", "unknown"}
 
@@ -61,13 +62,13 @@ def cmd_admin(args):
 
     if args.action == "forget":
         if not args.session_id:
-            print("错误: 需要 --session-id 参数")
+            print(_("错误: 需要 --session-id 参数"))
             sys.exit(1)
         if not getattr(args, "confirm", False):
-            print("错误: 需要 --confirm 确认删除")
+            print(_("错误: 需要 --confirm 确认删除"))
             sys.exit(1)
         if not DB.exists():
-            print("数据库不存在: {}".format(DB))
+            print(_("数据库不存在: {}").format(DB))
             sys.exit(1)
 
         conn = _open_db(DB)
@@ -99,12 +100,13 @@ def cmd_admin(args):
             },
         )
         print(
-            f"已删除 session {args.session_id}:\n  events: {deleted_events}\n  diagnoses: {deleted_dx}\n  审计事件已写入: {fp}"
+            _("已删除 session %s:\n  events: %s\n  diagnoses: %s\n  审计事件已写入: %s")
+            % (args.session_id, deleted_events, deleted_dx, fp)
         )
 
     elif args.action == "vacuum":
         if not DB.exists():
-            print("数据库不存在: {}".format(DB))
+            print(_("数据库不存在: {}").format(DB))
             sys.exit(1)
         conn = _open_db(DB)
         before = DB.stat().st_size
@@ -124,12 +126,15 @@ def cmd_admin(args):
             },
         )
         print(
-            f"VACUUM 完成:\n  前: {before / 1048576:.2f} MB\n  后: {after / 1048576:.2f} MB\n  释放: {(before - after) / 1048576:.2f} MB\n  审计事件已写入: {fp}"
+            _(
+                "VACUUM 完成:\n  前: %.2f MB\n  后: %.2f MB\n  释放: %.2f MB\n  审计事件已写入: %s"
+            )
+            % (before / 1048576, after / 1048576, (before - after) / 1048576, fp)
         )
 
     elif args.action == "cleanup":
         if not DB.exists():
-            print("数据库不存在: {}".format(DB))
+            print(_("数据库不存在: {}").format(DB))
             sys.exit(1)
 
         conn = _open_db(DB)
@@ -160,7 +165,9 @@ def cmd_admin(args):
                 "timestamp": time.time(),
             },
         )
-        print(f"清理完成:\n  events: {cleaned_events}\n  diagnoses: {cleaned_dx}")
+        print(
+            _("清理完成:\n  events: %s\n  diagnoses: %s") % (cleaned_events, cleaned_dx)
+        )
 
 
 def cmd_exclude(args):
@@ -169,19 +176,19 @@ def cmd_exclude(args):
 
     if args.action == "list":
         print(
-            "已排除的实例:\n  " + "\n  ".join(sorted(excluded))
+            _("已排除的实例:\n  ") + "\n  ".join(sorted(excluded))
             if excluded
-            else "没有排除任何实例"
+            else _("没有排除任何实例")
         )
         return
 
     if not args.system:
-        print("错误: 需要指定实例名称")
+        print(_("错误: 需要指定实例名称"))
         sys.exit(1)
 
     if args.action == "add":
         if args.system in excluded:
-            print(f"实例 {args.system} 已在排除列表中")
+            print(_("实例 %s 已在排除列表中") % args.system)
             return
         excluded.add(args.system)
         _save_excluded(excluded)
@@ -189,10 +196,13 @@ def cmd_exclude(args):
         paused_dir = Path.home() / ".ming" / ".paused"
         paused_dir.mkdir(parents=True, exist_ok=True)
         (paused_dir / args.system).write_text("")
-        print(f"已停止观察 {args.system}\n当前排除列表: {', '.join(sorted(excluded))}")
+        print(
+            _("已停止观察 %s\n当前排除列表: %s")
+            % (args.system, ", ".join(sorted(excluded)))
+        )
     elif args.action == "remove":
         if args.system not in excluded:
-            print(f"实例 {args.system} 不在排除列表中")
+            print(_("实例 %s 不在排除列表中") % args.system)
             return
         excluded.discard(args.system)
         _save_excluded(excluded)
@@ -201,11 +211,11 @@ def cmd_exclude(args):
         if paused_file.exists():
             paused_file.unlink()
         print(
-            f"已恢复观察 {args.system}\n"
+            _("已恢复观察 %s\n") % args.system
             + (
-                f"当前排除列表: {', '.join(sorted(excluded))}"
+                _("当前排除列表: %s") % ", ".join(sorted(excluded))
                 if excluded
-                else "排除列表已清空"
+                else _("排除列表已清空")
             )
         )
 
@@ -221,7 +231,7 @@ def cmd_probe(args):
         _cmd_probe_list(DB)
     elif args.action == "uninstall":
         if not args.system:
-            print("错误: 卸载需要指定探针名称")
+            print(_("错误: 卸载需要指定探针名称"))
             sys.exit(1)
         _cmd_probe_uninstall(DB, HOT, COLD, PAUSED, args)
 
@@ -229,7 +239,7 @@ def cmd_probe(args):
 def _cmd_probe_list(DB):
     """列出所有已注册的探针及状态"""
     if not DB.exists():
-        print("暂无已注册的探针")
+        print(_("暂无已注册的探针"))
         return
 
     conn = _open_db(DB, readonly=True)
@@ -242,11 +252,11 @@ def _cmd_probe_list(DB):
                 "FROM system_pid sp ORDER BY last_seen DESC"
             ).fetchall()
         except sqlite3.OperationalError:
-            print("暂无已注册的探针")
+            print(_("暂无已注册的探针"))
             return
 
         if not rows:
-            print("暂无已注册的探针")
+            print(_("暂无已注册的探针"))
             return
 
         now = time.time()
@@ -254,22 +264,21 @@ def _cmd_probe_list(DB):
         paused = {f.name for f in pd.iterdir() if f.is_file()} if pd.exists() else set()
         excluded = _load_excluded()
 
-        print(
-            f"\n  {'探针名称':<18} {'最后心跳':<20} {'模式':<8} {'事件数':<8} {'状态'}"
-        )
+        cols = (_("探针名称"), _("最后心跳"), _("模式"), _("事件数"), _("状态"))
+        print(f"\n  {cols[0]:<18} {cols[1]:<20} {cols[2]:<8} {cols[3]:<8} {cols[4]}")
         print("  " + "-" * 78)
         for r in rows:
             ago = now - r["last_seen"]
             if ago < 60:
-                status = "活跃 (<1分)"
+                status = _("活跃 (<1分)")
             elif ago < 3600:
-                status = f"活跃 ({int(ago / 60)}分前)"
+                status = _("活跃 (%d分前)") % int(ago / 60)
             elif ago < 86400:
-                status = f"离线 ({int(ago / 3600)}小时前)"
+                status = _("离线 (%d小时前)") % int(ago / 3600)
             else:
-                status = f"离线 ({int(ago / 86400)}天前)"
+                status = _("离线 (%d天前)") % int(ago / 86400)
             if r["system"] in paused or r["system"] in excluded:
-                status += " [已暂停]"
+                status += _(" [已暂停]")
             print(
                 f"  {r['system']:<18} {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(r['last_seen'])):<20} "
                 f"{r['mode']:<8} {r['event_count']:<8} {status}"
@@ -279,10 +288,10 @@ def _cmd_probe_list(DB):
 
 
 _PROTECTED_HINTS = {
-    "__admin__": "用 'ming admin cleanup' 清理管理事件和自检数据",
-    "__self_health__": "用 'ming admin cleanup' 清理管理事件和自检数据",
-    "__host__": "停止 platform_probe 进程即可，主机监控数据建议保留",
-    "unknown": "用 'ming admin cleanup' 清理 unknown 系统数据",
+    "__admin__": _("用 'ming admin cleanup' 清理管理事件和自检数据"),
+    "__self_health__": _("用 'ming admin cleanup' 清理管理事件和自检数据"),
+    "__host__": _("停止 platform_probe 进程即可，主机监控数据建议保留"),
+    "unknown": _("用 'ming admin cleanup' 清理 unknown 系统数据"),
 }
 
 
@@ -292,9 +301,9 @@ def _cmd_probe_uninstall(DB, HOT, COLD, PAUSED, args):
     force, keep_data = getattr(args, "force", False), getattr(args, "keep_data", False)
 
     if system in _PROTECTED_SYSTEMS:
-        print(f"错误: 不能卸载系统内部探针 '{system}'")
+        print(_("错误: 不能卸载系统内部探针 '%s'") % system)
         if system in _PROTECTED_HINTS:
-            print(f"提示: {_PROTECTED_HINTS[system]}")
+            print(_("提示: %s") % _PROTECTED_HINTS[system])
         sys.exit(1)
 
     event_count = diagnosis_count = 0
@@ -317,33 +326,35 @@ def _cmd_probe_uninstall(DB, HOT, COLD, PAUSED, args):
         finally:
             conn.close()
 
-    print(f"\n准备卸载探针: {system}")
+    print(_("\n准备卸载探针: %s") % system)
     print(
-        f"  事件: {event_count}  诊断: {diagnosis_count}  热轨: {len(hot_files)}  冷轨: {len(cold_files)}"
+        _("  事件: %s  诊断: %s  热轨: %s  冷轨: %s")
+        % (event_count, diagnosis_count, len(hot_files), len(cold_files))
     )
     if last_seen:
         ago = int(time.time() - last_seen)
         print(
-            f"  最后心跳: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(last_seen))}"
-            f"{'  ⚠ 可能仍在运行' if ago < 60 else ''}"
+            _("  最后心跳: %s")
+            % time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(last_seen))
+            + (_("  ⚠ 可能仍在运行") if ago < 60 else "")
         )
     elif event_count == 0:
-        print("  数据库无记录，仅清理文件残留")
+        print(_("  数据库无记录，仅清理文件残留"))
 
     if dry_run:
-        print("\n[dry-run] 未执行变更")
+        print(_("\n[dry-run] 未执行变更"))
         return
 
     if not force:
         action_desc = (
-            "备份 → 停止观察 → 清库 → 清文件 → VACUUM"
+            _("备份 → 停止观察 → 清库 → 清文件 → VACUUM")
             if not keep_data
-            else "停止观察 + 清理热轨文件（保留记录）"
+            else _("停止观察 + 清理热轨文件（保留记录）")
         )
         if input(
-            f"\n将执行: {action_desc}\n\n确认卸载？[y/N] "
+            _("\n将执行: %s\n\n确认卸载？[y/N] ") % action_desc
         ).strip().lower() not in ("y", "yes"):
-            print("已取消")
+            print(_("已取消"))
             return
 
     deleted_events = deleted_pid = deleted_files = 0
@@ -361,7 +372,7 @@ def _cmd_probe_uninstall(DB, HOT, COLD, PAUSED, args):
             conn.commit()
             conn.execute("VACUUM")
         except (sqlite3.OperationalError, OSError) as e:
-            print(f"操作失败: {e}")
+            print(_("操作失败: %s") % e)
             return
         finally:
             conn.close()
@@ -402,12 +413,12 @@ def _cmd_probe_uninstall(DB, HOT, COLD, PAUSED, args):
     )
 
     if keep_data:
-        print(f"\n已停止观察 {system}，数据已保留")
+        print(_("\n已停止观察 %s，数据已保留") % system)
     else:
-        parts = [f"{deleted_events} 事件", f"{deleted_pid} 注册"]
+        parts = [_("%s 事件") % deleted_events, _("%s 注册") % deleted_pid]
         if deleted_files:
-            parts.append(f"{deleted_files} 文件")
-        print(f"\n卸载完成: {' / '.join(parts)}")
+            parts.append(_("%s 文件") % deleted_files)
+        print(_("\n卸载完成: %s") % " / ".join(parts))
 
 
 def cmd_known_probes(args):
@@ -423,42 +434,48 @@ def cmd_known_probes(args):
 
     if action == "list":
         info = list_known_probes()
-        print("\n  已知探针（三层合并）:")
-        print(f"    内置默认:    {', '.join(info['default'])}")
-        print(f"    用户自定义:  {', '.join(info['user']) or '(空)'}")
-        print(f"    自动发现:    {', '.join(info['auto_discovered']) or '(空)'}")
-        print(f"\n  合并结果（{len(info['merged'])} 个）: {', '.join(info['merged'])}")
+        print(_("\n  已知探针（三层合并）:"))
+        print(_("    内置默认:    %s") % ", ".join(info["default"]))
+        print(_("    用户自定义:  %s") % (", ".join(info["user"]) or _("(空)")))
+        print(
+            _("    自动发现:    %s") % (", ".join(info["auto_discovered"]) or _("(空)"))
+        )
+        print(
+            _("\n  合并结果（%d 个）: %s")
+            % (len(info["merged"]), ", ".join(info["merged"]))
+        )
 
     elif action == "add":
         name = getattr(args, "name", None)
         if not name:
-            print("错误: 需要 --name 参数")
+            print(_("错误: 需要 --name 参数"))
             sys.exit(1)
         if add_known_probe(name):
-            print(f"已添加 '{name}' 到已知探针列表")
+            print(_("已添加 '%s' 到已知探针列表") % name)
         else:
-            print(f"'{name}' 已在用户配置中")
+            print(_("'%s' 已在用户配置中") % name)
 
     elif action == "remove":
         name = getattr(args, "name", None)
         if not name:
-            print("错误: 需要 --name 参数")
+            print(_("错误: 需要 --name 参数"))
             sys.exit(1)
         if remove_known_probe(name):
-            print(f"已从用户配置移除 '{name}'")
+            print(_("已从用户配置移除 '%s'") % name)
         else:
-            print(f"'{name}' 不在用户配置中")
+            print(_("'%s' 不在用户配置中") % name)
 
     elif action == "discover":
-        print("正在扫描归档库 + 热轨...")
+        print(_("正在扫描归档库 + 热轨..."))
         discovered = auto_discover_probes()
         info = list_known_probes(discovered=discovered)
         new_probes = discovered - set(info["merged"])
         print(
-            f"\n  已发现 {len(discovered)} 个探针: {', '.join(sorted(discovered)) or '(无)'}"
+            _("\n  已发现 %d 个探针: %s")
+            % (len(discovered), ", ".join(sorted(discovered)) or _("(无)"))
         )
         if new_probes:
-            print(f"\n  新发现（未在已知列表中）: {', '.join(sorted(new_probes))}")
-            print("  运行 'ming known-probes add --name <名称>' 添加到已知列表")
+            print(_("\n  新发现（未在已知列表中）: %s") % ", ".join(sorted(new_probes)))
+            print(_("  运行 'ming known-probes add --name <名称>' 添加到已知列表"))
         else:
-            print("\n  所有发现的探针已在已知列表中")
+            print(_("\n  所有发现的探针已在已知列表中"))

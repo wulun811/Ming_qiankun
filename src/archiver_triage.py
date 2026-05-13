@@ -40,6 +40,9 @@ def _run_triage_async(triage_running, log_fn, snapshot_path):
         triage_run(verbose=False)
 
         from lit_lite import diagnose
+        import importlib, sys
+        if "lit_lite" in sys.modules:
+            importlib.reload(sys.modules["lit_lite"])
 
         diagnose()
     except Exception as e:
@@ -60,6 +63,9 @@ def run_diagnosis_async(log_fn=None):
     _last_diagnose_ts = now
     try:
         from lit_lite import diagnose
+        import importlib, sys
+        if "lit_lite" in sys.modules:
+            importlib.reload(sys.modules["lit_lite"])
 
         t = threading.Thread(
             target=_run_diagnosis_safe, args=(diagnose, log_fn), daemon=True

@@ -236,6 +236,7 @@ cd ~/ming-run
 
 Web 面板是独立进程，停止后不影响归档器核心功能。
 访问 `http://localhost:18088` 查看实时数据。
+右上角 `EN` / `中文` 按钮可切换 Web 面板语言（localStorage 持久化）。CLI 输出默认中文，设置 `export MING_LANG=en` 可切换为英文。
 
 ## JSON 输出格式
 
@@ -390,7 +391,7 @@ cd ~/ming-run
 
 | 版本 | 关键信息 |
 |------|---------|
- | v0.11.10 (当前) | 三级存储压缩（zlib, -27% DB 体积）+ ming upgrade 一键升级 + token 统计修复 |
+ | v0.11.14 (当前) | i18n 国际化（CLI + Web 面板全双语），Web 安全修复，WAL/内存优化 |
  | v0.11.7 | 体检中心模式：4 级健康评估、忽略/归档/复位/恢复操作、逐实例报告、`instance-list` / `ignore` / `archive-disease` / `restore` / `reset` / `reset-status` 命令；~89 条 Hermes-ready（合成 agent_step + OS 采样 + deep extract） |
 | v0.11.6 | 157 条规则，69 条 Hermes-ready |
 | v0.11.5 | 66 ready，role/error_type 字段 |

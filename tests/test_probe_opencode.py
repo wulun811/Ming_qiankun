@@ -237,6 +237,7 @@ class TestPollMessages(unittest.TestCase):
                             "providerID": "openai",
                             "tokens": {"input": 100, "output": 50},
                             "time": {"created": 100, "completed": 200},
+                            "finish": "stop",
                         },
                         "time_created": 1000,
                     },
@@ -274,12 +275,20 @@ class TestPollMessages(unittest.TestCase):
                 messages=[
                     {
                         "id": "m1",
-                        "data": {"role": "assistant", "modelID": "gpt-4"},
+                        "data": {
+                            "role": "assistant",
+                            "modelID": "gpt-4",
+                            "finish": "stop",
+                        },
                         "time_created": 100,
                     },
                     {
                         "id": "m2",
-                        "data": {"role": "assistant", "modelID": "gpt-4"},
+                        "data": {
+                            "role": "assistant",
+                            "modelID": "gpt-4",
+                            "finish": "stop",
+                        },
                         "time_created": 200,
                     },
                 ],
@@ -288,6 +297,101 @@ class TestPollMessages(unittest.TestCase):
             events = poll_messages(conn, cursor, limit=100)
             self.assertEqual(len(events), 1)
             self.assertEqual(events[0][3], "m2")
+
+    def test_poll_messages_skip_incomplete(self):
+        """finish=null 的消息（API 尚未返回）应被跳过，不归档、不推进 cursor"""
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "test.db"
+            conn = _create_mock_db(
+                db_path,
+                messages=[
+                    {
+                        "id": "m1",
+                        "session_id": "s1",
+                        "data": {
+                            "role": "assistant",
+                            "modelID": "gpt-4",
+                            "providerID": "openai",
+                            "tokens": {"input": 0, "output": 0},
+                            "time": {"created": 100},
+                        },
+                        "time_created": 1000,
+                    },
+                ],
+            )
+            cursor = {"message": {"ts": 0, "id": ""}, "part": {"ts": 0, "id": ""}}
+            events = poll_messages(conn, cursor, limit=100)
+            self.assertEqual(events, [])
+
+    def test_poll_messages_skip_empty_finish(self):
+        """finish='' 的消息应被跳过"""
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "test.db"
+            conn = _create_mock_db(
+                db_path,
+                messages=[
+                    {
+                        "id": "m1",
+                        "session_id": "s1",
+                        "data": {
+                            "role": "assistant",
+                            "modelID": "gpt-4",
+                            "finish": "",
+                            "tokens": {"input": 0, "output": 0},
+                        },
+                        "time_created": 1000,
+                    },
+                ],
+            )
+            cursor = {"message": {"ts": 0, "id": ""}, "part": {"ts": 0, "id": ""}}
+            events = poll_messages(conn, cursor, limit=100)
+            self.assertEqual(events, [])
+
+    def test_poll_messages_incomplete_then_complete(self):
+        """竞态场景：先读到 incomplete（跳过），下次轮询读到 complete"""
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "test.db"
+            conn = _create_mock_db(
+                db_path,
+                messages=[
+                    {
+                        "id": "m1",
+                        "session_id": "s1",
+                        "data": {
+                            "role": "assistant",
+                            "modelID": "gpt-4",
+                            "tokens": {"input": 0, "output": 0},
+                        },
+                        "time_created": 1000,
+                    },
+                ],
+            )
+            cursor = {"message": {"ts": 0, "id": ""}, "part": {"ts": 0, "id": ""}}
+            # 第一轮：finish=null，跳过
+            events = poll_messages(conn, cursor, limit=100)
+            self.assertEqual(events, [])
+            # 模拟 opencode 完成写入（更新 data）
+            conn.execute(
+                "UPDATE message SET data = ? WHERE id = ?",
+                (
+                    json.dumps(
+                        {
+                            "role": "assistant",
+                            "modelID": "gpt-4",
+                            "finish": "stop",
+                            "tokens": {"input": 906, "output": 138},
+                            "time": {"created": 1000, "completed": 1500},
+                        }
+                    ),
+                    "m1",
+                ),
+            )
+            conn.commit()
+            # 第二轮：cursor 未推进，重新读取同一条消息，现在 finish="stop"，通过
+            events = poll_messages(conn, cursor, limit=100)
+            self.assertEqual(len(events), 1)
+            self.assertEqual(events[0][1]["layer_llm"]["input_tokens"], 906)
+            self.assertEqual(events[0][1]["layer_llm"]["output_tokens"], 138)
 
 
 class TestPollParts(unittest.TestCase):

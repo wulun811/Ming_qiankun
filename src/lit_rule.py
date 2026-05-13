@@ -115,9 +115,13 @@ def _parse_yaml_simple() -> list:
                 current = {}
                 kv = stripped[2:].split(":", 1)
                 if len(kv) == 2:
-                    current[kv[0].strip()] = _yaml_value(
-                        kv[1].strip().strip('"').strip("'")
-                    )
+                    key = kv[0].strip()
+                    val = kv[1].strip().strip('"').strip("'")
+                    # 特殊处理：第一个字段是 always_on，保存到 pending
+                    if key == "always_on":
+                        current["_pending_always_on"] = _yaml_value(val)
+                    else:
+                        current[key] = _yaml_value(val)
             elif ":" in stripped and not stripped.startswith("#"):
                 kv = stripped.split(":", 1)
                 key = kv[0].strip()
@@ -128,6 +132,9 @@ def _parse_yaml_simple() -> list:
                     multiline_val = []
                 elif val:
                     current[key] = _yaml_value(val.strip('"').strip("'"))
+                    # 当遇到 id 字段时，合并 pending_always_on
+                    if key == "id" and "_pending_always_on" in current:
+                        current["always_on"] = current.pop("_pending_always_on")
         if current and "id" in current:
             diseases.append(current)
         return diseases

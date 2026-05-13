@@ -8,6 +8,10 @@ if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 
 from cli_admin import _escape_like
+import os
+
+os.environ["MING_LANG"] = "zh"
+
 from cli import (
     _PREDEFINED_QUERIES,
     _PREDEFINED_NON_DIAG,

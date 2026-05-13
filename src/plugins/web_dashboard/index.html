@@ -112,7 +112,7 @@ body {
 .disease-row .dx-name { flex:1; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .disease-row .dx-conf { width:40px; text-align:right; color:var(--text-secondary); font-size:12px; }
 .disease-row .dx-time { width:70px; text-align:right; color:var(--text-muted); font-size:12px; }
-.disease-row .dx-count { width:55px; text-align:right; color:var(--text-muted); font-size:12px; }
+.disease-row .dx-count { width:90px; text-align:right; color:var(--text-muted); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .disease-row.dismissed { opacity:0.4; text-decoration:line-through; }
 
 .expand-btn { display:block; text-align:center; margin-top:10px; padding:6px; color:var(--accent-teal); font-family:var(--font-mono); font-size:13px; cursor:pointer; border-radius:var(--radius-sm); transition:background 0.2s; }
@@ -250,7 +250,7 @@ footer { text-align:center; padding:24px; color:var(--text-muted); font-size:13p
 
 <div id="loading" style="text-align:center;padding:80px 20px;color:var(--text-muted)">
   <div style="width:36px;height:36px;border:3px solid rgba(255,255,255,0.06);border-top-color:var(--accent-teal);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 20px"></div>
-  <p>初始化体检中心...</p>
+  <p id="loadingText">初始化体检中心...</p>
 </div>
 
 <div id="app" style="display:none">
@@ -258,13 +258,13 @@ footer { text-align:center; padding:24px; color:var(--text-muted); font-size:13p
   <!-- Header -->
   <div class="header">
     <div class="brand">
-      <h1>乾坤镜 · 体检中心</h1>
-      <span style="font-family:var(--font-mono);font-size:13px;color:var(--text-muted)">v0.11.10</span> <!-- 更新时同步修改此版本号 -->
+      <h1 id="appTitle">乾坤镜 · 体检中心</h1>
+      <span style="font-family:var(--font-mono);font-size:13px;color:var(--text-muted)">v0.11.14.post1</span> <!-- 更新时同步修改此版本号 -->
     </div>
     <div class="status-bar">
       <span class="dot online" id="archiverDot"></span>
       <span style="font-family:var(--font-mono);font-size:14px;color:var(--text-secondary)" id="archiverText">归档器在线</span>
-      <button class="btn" onclick="QK.refresh()">刷新</button>
+      <button class="btn" onclick="QK.refresh()" id="refreshBtn">刷新</button>
       <button class="btn" onclick="QK.toggleLang()" id="langBtn">EN</button>
     </div>
   </div>
@@ -277,9 +277,9 @@ footer { text-align:center; padding:24px; color:var(--text-muted); font-size:13p
 
   <!-- Sort Bar -->
   <div class="sort-bar" id="sortBar">
-    <button class="active" onclick="QK.sort('health')">健康度 ↓</button>
-    <button onclick="QK.sort('severity')">严重度 ↓</button>
-    <button onclick="QK.sort('name')">名称 A-Z</button>
+    <button class="active" onclick="QK.sort('health')" id="sortHealthBtn">健康度 ↓</button>
+    <button onclick="QK.sort('severity')" id="sortSeverityBtn">严重度 ↓</button>
+    <button onclick="QK.sort('name')" id="sortNameBtn">名称 A-Z</button>
   </div>
 
   <!-- Instance Card Grid -->
@@ -288,7 +288,7 @@ footer { text-align:center; padding:24px; color:var(--text-muted); font-size:13p
   <!-- Disease Distribution -->
   <div class="collapse-section">
     <div class="collapse-trigger" onclick="QK.toggleCollapse('diseaseDist')">
-      <span class="arrow">▶</span> 疾病分布 · Disease Distribution
+      <span class="arrow">▶</span> <span id="diseaseDistTitle">疾病分布 · Disease Distribution</span>
     </div>
     <div class="collapse-body" id="diseaseDist"></div>
   </div>
@@ -296,7 +296,7 @@ footer { text-align:center; padding:24px; color:var(--text-muted); font-size:13p
   <!-- Diagnostic Coverage -->
   <div class="collapse-section">
     <div class="collapse-trigger" onclick="QK.toggleCollapse('dxCoverage')">
-      <span class="arrow">▶</span> 诊断能力 · Diagnostic Coverage
+      <span class="arrow">▶</span> <span id="dxCoverageTitle">诊断能力 · Diagnostic Coverage</span>
     </div>
     <div class="collapse-body" id="dxCoverage"></div>
   </div>
@@ -304,7 +304,7 @@ footer { text-align:center; padding:24px; color:var(--text-muted); font-size:13p
   <!-- Advanced Info -->
   <div class="collapse-section">
     <div class="collapse-trigger" onclick="QK.toggleCollapse('advInfo')">
-      <span class="arrow">▶</span> 高级信息 · Advanced Info
+      <span class="arrow">▶</span> <span id="advInfoTitle">高级信息 · Advanced Info</span>
     </div>
     <div class="collapse-body" id="advInfo">
       <div class="adv-tabs" id="advTabs"></div>
@@ -314,12 +314,12 @@ footer { text-align:center; padding:24px; color:var(--text-muted); font-size:13p
 
   <div class="collapse-section">
     <div class="collapse-trigger" onclick="QK.toggleCollapse('resourceFootprint')">
-      <span class="arrow">▶</span> 資源足跡 · Resource Footprint
+      <span class="arrow">▶</span> <span id="resourceFootprintTitle">資源足跡 · Resource Footprint</span>
     </div>
     <div class="collapse-body" id="resourceFootprint"></div>
   </div>
 
-  <footer>乾坤镜 · LIT 1.4 轻量折射阵列</footer>
+  <footer id="appFooter">乾坤镜 · LIT 1.4 轻量折射阵列</footer>
 </div>
 
 <script>
@@ -327,6 +327,7 @@ footer { text-align:center; padding:24px; color:var(--text-muted); font-size:13p
 var D = null;
 var LANG = 'zh';
 var INSTANCES = [];
+
 var SORT = 'health';
 var ACTIVE_ADV_TAB = 'token';
 
@@ -350,6 +351,43 @@ var I18N = {
     probeOnline: '探针在线', probeOffline: '探针离线', probeNever: '探针未上报', probeExcluded: '暂停观察',
     probeGuide: '请确认对应系统已安装并启动 mingjin-probe',
     systemLevel: '系统级',
+    appTitle: '乾坤镜 · 体检中心',
+    loading: '初始化体检中心...',
+    dataError: '无法连接数据服务，请确认 web server 已启动',
+    refresh: '刷新',
+    sortHealth: '健康度 ↓',
+    sortSeverity: '严重度 ↓',
+    diseaseDistribution: '疾病分布 · Disease Distribution',
+    dxCoverage: '诊断能力 · Diagnostic Coverage',
+    advancedInfo: '高级信息 · Advanced Info',
+    resourceFootprint: '資源足跡 · Resource Footprint',
+    footer: '乾坤镜 · LIT 1.4 轻量折射阵列',
+    dxLimit: '诊断上限', dxLimitSuffix: '种',
+    pauseObs: '暂停观察', resumeObs: '恢复观察', dxLimitPrefix: '诊断上限: ',
+    heartbeat: '心跳', lastHeartbeat: '最后心跳', sortName: '名称 A-Z',
+    noInstanceData: '暂无实例数据',
+    noDistData: '暂无分布数据',
+    dxCoverageNote: 'ℹ️ 每种适配器触发的事件类型不同，实际可查疾病上限各不一致，详见各实例卡片底部',
+    missingField: '缺少字段: ',
+    tabTokens: 'Token 消耗', tabModels: '模型分布', tabLatency: '延迟分布',
+    tabFreq: 'API 频率', tabInteg: '完整性', tabCap: '容量',
+    tabHot: '热轨', tabOTEL: 'OTEL', tabSelfh: '自检',
+    hSystem: '系统', hInput: '输入', hOutput: '输出', hTotal: '总计', hCalls: '调用', hRatio: '占比',
+    noTokenData: '暂无 Token 数据', noModelData: '暂无模型数据',
+    noLatencyData: '暂无延迟数据', noFreqData: '暂无调用数据',
+    lblVerified: '验证:', lblBad: '损坏:', lblRestart: '重启:',
+    lblTotalShort: '总计:', lblRate: '比率:', lblPending: '待验证:',
+    lblEvents: '事件:', lblDisk: '磁盘:', lblFree: 'MB 剩余',
+    lblHotFiles: '热轨: ', lblUnarchived: '未归档文件:', lblTotalCap: '总量:',
+    lblHotLag: '归档器延迟:', unitSec: 's',
+    otelOnline: '在线', otelOffline: '离线',
+    otelPort: '端口:', otelReceived: '收到:', otelDropped: '丢弃:',
+    otelPushed: '推送:', otelDead: '死信:',
+    selfLag: '归档器延迟:', selfLoss: '丢包率:', selfMemory: '内存:', selfWAL: 'WAL:',
+    fpSystem: '系统', fpRSS: 'RSS', fpVSZ: 'VSZ', fpCPU: 'CPU', fpFD: 'FD', fpRunning: '运行',
+    gpuIdle: '空闲', unitCount: '次', unitMB: 'MB',
+    otelReceiver: 'Receiver: ', otelExporter: 'Exporter: ',
+    dbLabel: 'DB: ',
   },
   en: {
     archiverOnline: 'Archiver Online', archiverOffline: 'Archiver Offline',
@@ -357,7 +395,7 @@ var I18N = {
     integrity: 'Integrity', coverage: 'Coverage', updated: 'Updated',
     secondsAgo: 's ago', minutesAgo: 'm ago', hoursAgo: 'h ago',
     daysAgo: 'd ago', noDisease: 'No Disease', systemHealthy: 'System Healthy',
-    occurrence: 'Occurrence', times: 'times', firstSeen: 'First Seen', duration: 'Duration',
+    occurrence: '×', times: '', firstSeen: 'First Seen', duration: 'Duration',
     confidence: 'Confidence', evidence: 'Evidence', remedy: 'Remedy',
     noRemedy: 'No Remedy', noRemedyDetail: 'No remedy recorded for this disease',
     ignore: 'Dismiss', restore: 'Restore', dismiss: 'Dismiss',
@@ -370,10 +408,76 @@ var I18N = {
     probeOnline: 'Probe Online', probeOffline: 'Probe Offline', probeNever: 'Probe Not Deployed', probeExcluded: 'Observation Paused',
     probeGuide: 'Please install and start mingjin-probe on the target system',
     systemLevel: 'System-Level',
+    appTitle: 'Mingjing Health Center',
+    loading: 'Initializing Health Center...',
+    dataError: 'Cannot connect to data service, please ensure web server is running',
+    refresh: 'Refresh',
+    sortHealth: 'Health ↓',
+    sortSeverity: 'Severity ↓',
+    diseaseDistribution: 'Disease Distribution',
+    dxCoverage: 'Diagnostic Coverage',
+    advancedInfo: 'Advanced Info',
+    resourceFootprint: 'Resource Footprint',
+    footer: 'Mingjing · LIT 1.4 Lightweight Refractive Array',
+    dxLimit: 'Dx Limit', dxLimitSuffix: '',
+    pauseObs: 'Pause Obs', resumeObs: 'Resume Obs', dxLimitPrefix: 'Dx Limit: ',
+    heartbeat: 'heartbeat', lastHeartbeat: 'last heartbeat', sortName: 'Name A-Z',
+    noInstanceData: 'No instance data',
+    noDistData: 'No distribution data',
+    dxCoverageNote: 'ℹ️ Coverage varies by adapter, check instance cards for details',
+    missingField: 'Missing fields: ',
+    tabTokens: 'Token Usage', tabModels: 'Model Dist.', tabLatency: 'Latency',
+    tabFreq: 'API Freq.', tabInteg: 'Integrity', tabCap: 'Capacity',
+    tabHot: 'Hot Track', tabOTEL: 'OTEL', tabSelfh: 'Self Check',
+    hSystem: 'System', hInput: 'Input', hOutput: 'Output', hTotal: 'Total', hCalls: 'Calls', hRatio: 'Ratio',
+    noTokenData: 'No token data', noModelData: 'No model data',
+    noLatencyData: 'No latency data', noFreqData: 'No call data',
+    lblVerified: 'Verified:', lblBad: 'Corrupted:', lblRestart: 'Restarted:',
+    lblTotalShort: 'Total:', lblRate: 'Rate:', lblPending: 'Pending:',
+    lblEvents: 'Events:', lblDisk: 'Disk:', lblFree: 'MB free',
+    lblHotFiles: 'Hot: ', lblUnarchived: 'Unarchived:', lblTotalCap: 'Total:',
+    lblHotLag: 'Archiver lag:', unitSec: 's',
+    otelOnline: 'Online', otelOffline: 'Offline',
+    otelPort: 'Port:', otelReceived: 'Rcvd:', otelDropped: 'Dropped:',
+    otelPushed: 'Pushed:', otelDead: 'Dead:',
+    selfLag: 'Archiver lag:', selfLoss: 'Loss:', selfMemory: 'Memory:', selfWAL: 'WAL:',
+    fpSystem: 'System', fpRSS: 'RSS', fpVSZ: 'VSZ', fpCPU: 'CPU', fpFD: 'FD', fpRunning: 'Uptime',
+    gpuIdle: 'Idle', unitCount: ' calls', unitMB: 'MB',
+    otelReceiver: 'Receiver: ', otelExporter: 'Exporter: ',
+    dbLabel: 'DB: ',
   }
 };
 
 function t(key) { return (I18N[LANG]||I18N.zh)[key]||key; }
+function dxName(dx) { return LANG === 'en' && dx.diagnosis_name_en ? dx.diagnosis_name_en : (dx.diagnosis_name || dx.fault_id || ''); }
+var descEnMap = {};
+function descEn(s) { if (LANG !== 'en') return s; var v = descEnMap[s]; return v || s; }
+
+function initUI() {
+  document.title = t('appTitle');
+  var el = document.getElementById('appTitle');
+  if (el) el.textContent = t('appTitle');
+  el = document.getElementById('appFooter');
+  if (el) el.textContent = t('footer');
+  el = document.getElementById('refreshBtn');
+  if (el) el.textContent = t('refresh');
+  el = document.getElementById('sortHealthBtn');
+  if (el) el.textContent = t('sortHealth');
+  el = document.getElementById('sortSeverityBtn');
+  if (el) el.textContent = t('sortSeverity');
+  el = document.getElementById('sortNameBtn');
+  if (el) el.textContent = t('sortName');
+  el = document.getElementById('diseaseDistTitle');
+  if (el) el.textContent = t('diseaseDistribution');
+  el = document.getElementById('dxCoverageTitle');
+  if (el) el.textContent = t('dxCoverage');
+  el = document.getElementById('advInfoTitle');
+  if (el) el.textContent = t('advancedInfo');
+  el = document.getElementById('resourceFootprintTitle');
+  if (el) el.textContent = t('resourceFootprint');
+}
+
+initUI();
 
 function fmtAgo(ts) {
   if (!ts) return '--';
@@ -472,8 +576,8 @@ function render() {
   if (activeAlerts.length) {
     var html = '';
     activeAlerts.forEach(function(a) {
-      html += '<span>' + a.title + ': ' + a.message + '</span>';
-      html += '<button class="alert-dismiss-btn" onclick="QK.dismissAlert(\'' + a.alert_key + '\')">' + t('dismiss') + '</button> ';
+      html += '<span>' + esc(a.title) + ': ' + esc(a.message) + '</span>';
+      html += '<button class="alert-dismiss-btn" onclick="QK.dismissAlert(\'' + esc(a.alert_key) + '\')">' + t('dismiss') + '</button> ';
     });
     ab.innerHTML = html; ab.className = 'alert-banner show';
   } else { ab.className = 'alert-banner'; }
@@ -485,7 +589,7 @@ function render() {
     ' <span class="sep">|</span> <span class="hl0">' + gs.healthy_count + '</span> ' + t('healthy') +
     ' <span class="sep">|</span> <span class="hl2">' + gs.unhealthy_count + '</span> ' + t('unhealthy') +
     ' <span class="sep">|</span> ' + t('integrity') + ': <span class="val">' + (gs.integrity_rate||100) + '%</span>' +
-    ' <span class="sep">|</span> ' + '诊断上限' + ': <span class="val">' + (gs.triage_total||157) + '种</span>' +
+    ' <span class="sep">|</span> ' + t('dxLimit') + ': <span class="val">' + (gs.triage_total||157) + t('dxLimitSuffix') + '</span>' +
     ' <span class="sep">|</span> ' + t('updated') + ' <span class="val">' + Math.floor((gs.exported_ago_seconds||0)) + 's</span>';
 
   // Sort & render cards
@@ -516,7 +620,7 @@ function sortCards() {
 
 function renderCards() {
   var grid = document.getElementById('instanceGrid');
-  if (!INSTANCES.length) { grid.innerHTML = '<div class="empty-state"><div class="icon">🔬</div><p>暂无实例数据</p></div>'; return; }
+  if (!INSTANCES.length) { grid.innerHTML = '<div class="empty-state"><div class="icon">🔬</div><p>' + t('noInstanceData') + '</p></div>'; return; }
 
   var html = '';
   INSTANCES.forEach(function(c) {
@@ -542,33 +646,33 @@ function renderCards() {
       html += '<span style="color:var(--accent-red)">🔴 ' + t('probeNever') + '</span>';
       html += '<span style="color:var(--text-muted);font-size:11px">' + t('probeGuide') + '</span>';
     } else if (pt <= 300) {
-      html += '<span style="color:var(--accent-green)">🟢 ' + t('probeOnline') + ' · 心跳 ' + fmtAgo(c.last_heartbeat) + '</span>';
+      html += '<span style="color:var(--accent-green)">🟢 ' + t('probeOnline') + ' · ' + t('heartbeat') + ' ' + fmtAgo(c.last_heartbeat) + '</span>';
     } else {
-      html += '<span style="color:var(--accent-orange)">🟠 ' + t('probeOffline') + ' · 最后心跳 ' + fmtAgo(c.last_heartbeat) + '</span>';
+      html += '<span style="color:var(--accent-orange)">🟠 ' + t('probeOffline') + ' · ' + t('lastHeartbeat') + ' ' + fmtAgo(c.last_heartbeat) + '</span>';
       html += '<span style="color:var(--text-muted);font-size:11px">💡 ' + t('probeGuide') + '</span>';
     }
     }
     html += '<span>PID ' + (c.pid||'?') + '</span>';
-    html += ' <button class="btn small" onclick="event.stopPropagation();QK.toggleExclude(\'' + c.system + '\', ' + c.excluded + ')\">' + (c.excluded ? '恢复观察' : '暂停观察') + '</button></div>';
+    html += ' <button class="btn small" onclick="event.stopPropagation();QK.toggleExclude(\'' + esc(c.system) + '\', ' + c.excluded + ')\">' + (c.excluded ? t('resumeObs') : t('pauseObs')) + '</button></div>';
     }
     html += '<hr class="inst-divider">';
 
     var dxs = c.diagnoses || [];
     if (!dxs.length) {
       html += '<div class="inst-healthy"><span class="ok">✅</span> ' + t('systemHealthy') + '</div>';
-      html += '<div class="inst-meta">' + (c.triage_ready < 0 ? t('systemLevel') : '') + (cap ? '诊断上限: ' + cap[LANG] : '') + '</div>';
+      html += '<div class="inst-meta">' + (c.triage_ready < 0 ? t('systemLevel') : '') + (cap ? t('dxLimitPrefix') + cap[LANG] : '') + '</div>';
       html += '<div class="expand-btn" onclick="QK.toggleCard(\'' + esc(c.display_name) + '\')">' + t('expand') + ' →</div>';
     } else {
       dxs.forEach(function(dx) {
         html += '<div class="disease-row">';
         html += '<div class="sev-bar ' + dx.severity + '"></div>';
-        html += '<span class="dx-name">' + dx.severity + ' ' + esc(dx.diagnosis_name) + '</span>';
+        html += '<span class="dx-name">' + dx.severity + ' ' + esc(dxName(dx)) + '</span>';
         html += '<span class="dx-conf">' + Math.round(dx.confidence*100) + '%</span>';
         html += '<span class="dx-time">' + fmtAgo(dx.first_seen) + '</span>';
-        html += '<span class="dx-count">' + t('occurrence') + (dx.occurrence_count||1) + t('times') + '</span>';
+        html += '<span class="dx-count">' + t('occurrence') + ' ' + (dx.occurrence_count||1) + ' ' + t('times') + '</span>';
         html += '</div>';
       });
-      html += '<div class="inst-meta" style="margin-top:4px">' + (c.triage_ready < 0 ? t('systemLevel') : '') + (cap ? '诊断上限: ' + cap[LANG] : '') + '</div>';
+      html += '<div class="inst-meta" style="margin-top:4px">' + (c.triage_ready < 0 ? t('systemLevel') : '') + (cap ? t('dxLimitPrefix') + cap[LANG] : '') + '</div>';
       html += '<div class="expand-btn" onclick="QK.toggleCard(\'' + esc(c.display_name) + '\')">' + t('expand') + ' →</div>';
     }
 
@@ -576,7 +680,7 @@ function renderCards() {
     html += '<div class="detail-panel" id="detail-' + esc(c.display_name) + '">';
     if (!dxs.length) {
       html += '<div class="inst-healthy"><span class="ok">✅</span> ' + t('systemHealthy') + '</div>';
-      html += '<div style="font-family:var(--font-mono);font-size:13px;color:var(--text-muted);margin-top:8px">' + (c.triage_ready < 0 ? t('systemLevel') : '') + (cap ? '诊断上限: ' + cap[LANG] : '') + '</div>';
+      html += '<div style="font-family:var(--font-mono);font-size:13px;color:var(--text-muted);margin-top:8px">' + (c.triage_ready < 0 ? t('systemLevel') : '') + (cap ? t('dxLimitPrefix') + cap[LANG] : '') + '</div>';
     } else {
       html += '<div class="detail-header">' + t('total') + ' ' + dxs.length + ' (' + t('criticalCount') + ': ' + c.p0_count + ', ' + t('warningCount') + ': ' + c.p1_count + ', ' + t('healthyCount') + ': ' + c.p2_count + ')</div>';
       dxs.forEach(function(dx) { html += renderDxDetail(dx, c.display_name); });
@@ -590,10 +694,10 @@ function renderCards() {
       archived.forEach(function(dx) {
         html += '<div class="archived-row">';
         html += '<span class="arch-label">' + t('archived') + '</span>';
-        html += '<span class="arch-name">' + (dx.severity||'P2') + ' ' + esc(dx.diagnosis_name||dx.fault_id) + '</span>';
+        html += '<span class="arch-name">' + (dx.severity||'P2') + ' ' + esc(dxName(dx)) + '</span>';
         html += '<span>' + fmtAgo(dx.first_seen) + '</span>';
         html += '<span>×' + (dx.occurrence_count||1) + '</span>';
-        html += '<button class="arch-btn" onclick="event.stopPropagation();QK.restoreDisease(\'' + dx.fault_id + '\',\'' + c.display_name + '\')">' + t('restore') + '</button>';
+        html += '<button class="arch-btn" onclick="event.stopPropagation();QK.restoreDisease(\'' + esc(dx.fault_id) + '\',\'' + esc(c.display_name) + '\')">' + t('restore') + '</button>';
         html += '</div>';
       });
       html += '</div></div>';
@@ -610,13 +714,13 @@ function renderDxDetail(dx, displayName) {
   var conf = Math.round((dx.confidence||0)*100);
 
   var h = '<div class="dx-detail ' + sev.toLowerCase() + '">';
-  h += '<div class="dx-title">' + esc(dx.diagnosis_name||dx.fault_id) + '<span class="dx-sev ' + sev + '">' + sev + '</span></div>';
+  h += '<div class="dx-title">' + esc(dxName(dx)) + '<span class="dx-sev ' + sev + '">' + sev + '</span></div>';
   h += '<div class="conf-bar-wrap"><div class="conf-bar"><div class="conf-fill ' + sev + '" style="width:' + conf + '%"></div></div><span class="conf-pct">' + conf + '%</span></div>';
 
   h += '<div class="dx-meta-row">';
   h += '<span><span class="lbl">' + t('firstSeen') + ':</span> <span class="val">' + fmtAgo(dx.first_seen) + '</span></span>';
   h += '<span><span class="lbl">' + t('duration') + ':</span> <span class="val">' + fmtDur(dx.duration_seconds) + '</span></span>';
-  h += '<span><span class="lbl">' + t('occurrence') + ':</span> <span class="val">' + (dx.occurrence_count||1) + ' ' + t('times') + '</span></span>';
+  h += '<span><span class="lbl">' + t('occurrence') + '</span> <span class="val">' + (dx.occurrence_count||1) + '</span></span>';
   h += '</div>';
 
   // Evidence
@@ -625,7 +729,7 @@ function renderDxDetail(dx, displayName) {
     h += '<div class="dx-section"><div class="dx-section-title">' + t('evidence') + '</div>';
     evidence.forEach(function(ev,i) {
       var summary = ev.summary || (typeof ev === 'string' ? ev : JSON.stringify(ev).slice(0,200));
-      h += '<div class="dx-evidence-item">' + (i+1) + '. ' + esc(String(summary).slice(0,300)) + '</div>';
+      h += '<div class="dx-evidence-item">' + (i+1) + '. ' + esc(descEn(String(summary)).slice(0,300)) + '</div>';
     });
     h += '</div>';
   }
@@ -647,8 +751,8 @@ function renderDxDetail(dx, displayName) {
 
   // Actions
   h += '<div class="dx-actions">';
-  h += '<button class="danger" onclick="QK.dismissDisease(\'' + dx.fault_id + '\',\'' + displayName + '\')">' + t('ignore') + '</button>';
-  h += '<button onclick="QK.archiveDisease(\'' + dx.fault_id + '\',\'' + displayName + '\')">' + t('archive') + '</button>';
+  h += '<button class="danger" onclick="QK.dismissDisease(\'' + esc(dx.fault_id) + '\',\'' + esc(displayName) + '\')">' + t('ignore') + '</button>';
+  h += '<button onclick="QK.archiveDisease(\'' + esc(dx.fault_id) + '\',\'' + esc(displayName) + '\')">' + t('archive') + '</button>';
   h += '</div>';
   h += '</div>';
   return h;
@@ -670,7 +774,7 @@ function renderDistribution() {
     html += '<span class="layer-count">' + t('detected') + ' ' + detected + '/' + total + '</span>';
     html += '</div>';
   });
-  document.getElementById('diseaseDist').innerHTML = html || '<div class="empty-state">暂无分布数据</div>';
+  document.getElementById('diseaseDist').innerHTML = html || '<div class="empty-state">' + t('noDistData') + '</div>';
 }
 
 function renderCoverage() {
@@ -682,9 +786,9 @@ function renderCoverage() {
   html += ' | P1: ' + (tiers.P1?tiers.P1.covered+'/'+tiers.P1.total:'--');
   html += ' | P2: ' + (tiers.P2?tiers.P2.covered+'/'+tiers.P2.total:'--');
   html += '<div style="margin-top:8px;font-size:12px;color:var(--text-muted)">';
-  html += 'ℹ️ 每种适配器触发的事件类型不同，实际可查疾病上限各不一致，详见各实例卡片底部';
+  html += t('dxCoverageNote');
   if (triage.missing_fields && triage.missing_fields.length) {
-    html += '<br>缺少字段: ' + triage.missing_fields.join(', ');
+    html += '<br>' + t('missingField') + esc(triage.missing_fields.join(', '));
   }
   html += '</div>';
   html += '</div>';
@@ -694,15 +798,15 @@ function renderCoverage() {
 function renderAdvanced() {
   var html = '';
   var tabs = [
-    {id:'token',label:'Token 消耗'},
-    {id:'model',label:'模型分布'},
-    {id:'latency',label:'延迟分布'},
-    {id:'freq',label:'API 频率'},
-    {id:'integ',label:'完整性'},
-    {id:'cap',label:'容量'},
-    {id:'hot',label:'热轨'},
-    {id:'otel',label:'OTEL'},
-    {id:'selfh',label:'自检'},
+    {id:'token',label:t('tabTokens')},
+    {id:'model',label:t('tabModels')},
+    {id:'latency',label:t('tabLatency')},
+    {id:'freq',label:t('tabFreq')},
+    {id:'integ',label:t('tabInteg')},
+    {id:'cap',label:t('tabCap')},
+    {id:'hot',label:t('tabHot')},
+    {id:'otel',label:t('tabOTEL')},
+    {id:'selfh',label:t('tabSelfh')},
   ];
   html += tabs.map(function(t){return '<button onclick="QK.showAdvTab(\''+t.id+'\')" id="advt-'+t.id+'">'+t.label+'</button>';}).join('');
   document.getElementById('advTabs').innerHTML = html;
@@ -736,7 +840,7 @@ function renderTokenTable() {
   var maxT = 1;
   rows.forEach(function(r){ var t = (r.total_tokens||0); if (t>maxT) maxT = t; });
   var h = '<table style="width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:14px">';
-  h += '<tr><th style="text-align:left;padding:6px;border-bottom:1px solid var(--glass-border);color:var(--text-muted)">系统</th><th>输入</th><th>输出</th><th>总计</th><th>调用</th><th>占比</th></tr>';
+  h += '<tr><th style="text-align:left;padding:6px;border-bottom:1px solid var(--glass-border);color:var(--text-muted)">' + t('hSystem') + '</th><th>' + t('hInput') + '</th><th>' + t('hOutput') + '</th><th>' + t('hTotal') + '</th><th>' + t('hCalls') + '</th><th>' + t('hRatio') + '</th></tr>';
   rows.forEach(function(r){
     h += '<tr><td style="padding:6px;border-bottom:1px solid rgba(255,255,255,0.04)">'+esc(r.system)+'</td>';
     h += '<td style="text-align:right;padding:6px">'+fmtM(r.input_tokens||0)+'</td><td style="text-align:right;padding:6px">'+fmtM(r.output_tokens||0)+'</td>';
@@ -744,20 +848,20 @@ function renderTokenTable() {
     h += '<td style="padding:6px"><div style="height:5px;background:rgba(255,255,255,0.05);border-radius:3px;overflow:hidden"><div style="height:100%;background:var(--accent-teal);border-radius:3px;width:'+Math.round(r.total_tokens/maxT*100)+'%"></div></div></td></tr>';
   });
   h += '</table>';
-  if (!rows.length) h = '<div class="empty-state">暂无 Token 数据</div>';
+  if (!rows.length) h = '<div class="empty-state">' + t('noTokenData') + '</div>';
   return h;
 }
 
 function renderModelList() {
   var models = D.token_by_model || [];
   var h = '';
-  models.forEach(function(m){ h += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono)"><span style="color:var(--accent-teal)">'+esc(m.model)+'</span><span style="color:var(--text-muted)">'+(m.call_count||0)+' 次</span></div>'; });
-  return h || '<div class="empty-state">暂无模型数据</div>';
+  models.forEach(function(m){ h += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono)"><span style="color:var(--accent-teal)">'+esc(m.model)+'</span><span style="color:var(--text-muted)">'+(m.call_count||0)+t('unitCount')+'</span></div>'; });
+  return h || '<div class="empty-state">' + t('noModelData') + '</div>';
 }
 
 function renderLatency() {
   var ls = D.latency_stats || {};
-  if (!ls.count) return '<div class="empty-state">暂无延迟数据</div>';
+  if (!ls.count) return '<div class="empty-state">' + t('noLatencyData') + '</div>';
   var h = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-family:var(--font-mono)">';
   ['min','avg','max','p50','p95','p99'].forEach(function(k){
     h += '<div style="text-align:center;padding:10px;background:rgba(0,0,0,0.15);border-radius:6px;border:1px solid rgba(255,255,255,0.04)"><div style="font-size:12px;color:var(--text-muted)">'+k.toUpperCase()+'</div><div style="font-size:18px;font-weight:600;margin-top:4px">'+Math.round(ls[k])+'ms</div></div>';
@@ -770,17 +874,17 @@ function renderFreq() {
   var freq = D.call_freq || [];
   var h = '';
   freq.forEach(function(f){ h += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono)"><span>'+esc(f.system)+'</span><span>'+f.calls_5min+' /5min</span></div>'; });
-  return h || '<div class="empty-state">暂无调用数据</div>';
+  return h || '<div class="empty-state">' + t('noFreqData') + '</div>';
 }
 
 function renderIntegrity() {
   var ist = D.integrity_stats || {};
   var h = '<div style="font-family:var(--font-mono);font-size:14px">';
-  h += '验证: <span style="color:var(--accent-green)">'+(ist.verified||0)+'</span> | ';
-  h += '损坏: <span style="color:var(--accent-red)">'+(ist.corrupted||0)+'</span> | ';
-  h += '重启: <span style="color:var(--accent-amber)">'+(ist.rebooted||0)+'</span> | ';
-  h += '总计: '+(ist.total||0)+' | 比率: '+(ist.rate||100)+'%';
-  if (ist.pending) h += ' | 待验证: ' + ist.pending;
+  h += t('lblVerified')+' <span style="color:var(--accent-green)">'+(ist.verified||0)+'</span> | ';
+  h += t('lblBad')+' <span style="color:var(--accent-red)">'+(ist.corrupted||0)+'</span> | ';
+  h += t('lblRestart')+' <span style="color:var(--accent-amber)">'+(ist.rebooted||0)+'</span> | ';
+  h += t('lblTotalShort')+' '+(ist.total||0)+' | '+t('lblRate')+' '+(ist.rate||100)+'%';
+  if (ist.pending) h += ' | '+t('lblPending')+' ' + ist.pending;
   h += '</div>';
   return h;
 }
@@ -788,19 +892,19 @@ function renderIntegrity() {
 function renderCapacity() {
   var cap = D.capacity || {};
   var h = '<div style="font-family:var(--font-mono);font-size:14px">';
-  h += 'DB: ' + cap.db_size_mb + 'MB/' + cap.db_size_limit_mb + 'MB | ';
-  h += '事件: ' + cap.event_count + '/' + cap.event_count_limit + ' | ';
-  h += '磁盘: ' + cap.disk_free_mb + 'MB 剩余 | ';
-  h += '热轨: ' + cap.hot_files + ' 文件/' + cap.hot_size_mb + 'MB';
+  h += t('dbLabel') + cap.db_size_mb + t('unitMB') + '/' + cap.db_size_limit_mb + t('unitMB') + ' | ';
+  h += t('lblEvents') + cap.event_count + '/' + cap.event_count_limit + ' | ';
+  h += t('lblDisk') + cap.disk_free_mb + t('lblFree') + ' | ';
+  h += t('lblHotFiles') + cap.hot_files + t('unitMB') + '/' + cap.hot_size_mb + t('unitMB');
   h += '</div>';
   return h;
 }
 
 function renderHot() {
   var h = '<div style="font-family:var(--font-mono);font-size:14px">';
-  h += '未归档文件: ' + (D.hot_unarchived_files||0) + ' | ';
-  h += '总量: ' + (D.hot_size_mb||0) + 'MB | ';
-  h += '归档器延迟: ' + Math.round(D.archiver_age_seconds||0) + 's';
+  h += t('lblUnarchived') + ' ' + (D.hot_unarchived_files||0) + ' | ';
+  h += t('lblTotalCap') + ' ' + (D.hot_size_mb||0) + t('unitMB') + ' | ';
+  h += t('lblHotLag') + ' ' + Math.round(D.archiver_age_seconds||0) + t('unitSec');
   h += '</div>';
   return h;
 }
@@ -808,8 +912,8 @@ function renderHot() {
 function renderOTEL() {
   var otel = D.otel_status || {};
   var h = '<div style="font-family:var(--font-mono);font-size:14px">';
-  h += 'Receiver: ' + (otel.receiver?.online?'在线':'离线') + ' (端口:'+(otel.receiver?.port||'?')+', 收到:'+(otel.receiver?.received_count||0)+', 丢弃:'+(otel.receiver?.dropped_count||0)+') | ';
-  h += 'Exporter: 推送:'+(otel.exporter?.pushed_count||0)+', 死信:'+(otel.exporter?.dead_letter_count||0);
+  h += t('otelReceiver') + (otel.receiver?.online ? t('otelOnline') : t('otelOffline')) + ' (' + t('otelPort') + (otel.receiver?.port||'?') + ', ' + t('otelReceived') + (otel.receiver?.received_count||0) + ', ' + t('otelDropped') + (otel.receiver?.dropped_count||0) + ') | ';
+  h += t('otelExporter') + t('otelPushed') + (otel.exporter?.pushed_count||0) + ', ' + t('otelDead') + (otel.exporter?.dead_letter_count||0);
   h += '</div>';
   return h;
 }
@@ -817,10 +921,10 @@ function renderOTEL() {
 function renderSelfHealth() {
   var sh = D.self_health || {};
   var h = '<div style="font-family:var(--font-mono);font-size:14px">';
-  h += '归档器延迟: ' + sh.archiver_lag_sec + 's | ';
-  h += '丢包率: ' + (sh.probe_loss_rate||0) + ' | ';
-  h += 'WAL: ' + sh.wal_count + ' | ';
-  h += '内存: ' + sh.memory_rss_mb + 'MB';
+  h += t('selfLag') + ' ' + sh.archiver_lag_sec + t('unitSec') + ' | ';
+  h += t('selfLoss') + ' ' + (sh.probe_loss_rate||0) + ' | ';
+  h += t('selfWAL') + ' ' + sh.wal_count + ' | ';
+  h += t('selfMemory') + ' ' + sh.memory_rss_mb + t('unitMB');
   h += '</div>';
   return h;
 }
@@ -832,7 +936,7 @@ function renderFootprint() {
   if (!systems.length) return;
   var h = '<div class="footprint-section">';
   h += '<table class="footprint-table"><thead><tr>';
-  h += '<th>系统</th><th class="rt">RSS</th><th class="rt">VSZ</th><th class="rt">CPU</th><th class="rt">FD</th><th class="rt">运行</th>';
+  h += '<th>' + t('fpSystem') + '</th><th class="rt">' + t('fpRSS') + '</th><th class="rt">' + t('fpVSZ') + '</th><th class="rt">' + t('fpCPU') + '</th><th class="rt">' + t('fpFD') + '</th><th class="rt">' + t('fpRunning') + '</th>';
   h += '</tr></thead><tbody>';
   for (var i = 0; i < systems.length; i++) {
     var s = systems[i];
@@ -851,7 +955,7 @@ function renderFootprint() {
     var utilPct = g.util_pct || 0;
     var memPct = g.mem_total_mb > 0 ? (g.mem_used_mb / g.mem_total_mb * 100) : 0;
     var hot = utilPct > 80 ? ' gpu-hot' : '';
-    var utilLabel = (utilPct < 0.1 && (g.mem_used_mb || 0) < 100) ? '<span class="gpu-idle">空闲</span>' : utilPct.toFixed(0) + '%';
+    var utilLabel = (utilPct < 0.1 && (g.mem_used_mb || 0) < 100) ? '<span class="gpu-idle">' + t('gpuIdle') + '</span>' : utilPct.toFixed(0) + '%';
     h += '<tr><td colspan="6"><div class="footprint-gpu">';
     h += 'GPU#' + g.index + ' <span class="gpu-name">' + esc(g.name || '') + '</span> ' + utilLabel;
     h += '<div class="gpu-bar"><div class="gpu-bar-fill' + hot + '" style="width:' + utilPct + '%;background:var(--accent-teal)"></div></div>';
@@ -870,7 +974,7 @@ function esc(str) { return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;'
 // Public API
 window.QK = {
   refresh: function() { fetchData(); },
-  toggleLang: function() { LANG = LANG==='zh'?'en':'zh'; document.getElementById('langBtn').textContent = LANG==='zh'?'EN':'中文'; render(); },
+  toggleLang: function() { LANG = LANG==='zh'?'en':'zh'; document.getElementById('langBtn').textContent = LANG==='zh'?'EN':'中文'; initUI(); render(); },
   sort: function(mode) {
     SORT = mode;
     var btns = document.querySelectorAll('#sortBar button');
@@ -951,12 +1055,15 @@ function fetchData() {
   saveUIState();
   fetch('/api/data.json').then(function(r){ return r.json(); }).then(function(data) {
     D = data;
+    descEnMap = {};
+    if (D.disease_catalog) { for (var k in D.disease_catalog) { var e = D.disease_catalog[k]; if (e.description && e.description_en) descEnMap[e.description] = e.description_en; } }
     document.getElementById('loading').style.display = 'none';
     document.getElementById('app').style.display = 'block';
+    initUI();
     render();
     restoreUIState();
   }).catch(function() {
-    document.getElementById('loadingText').textContent = '无法连接数据服务，请确认 web server 已启动';
+    document.getElementById('loadingText').textContent = t('dataError');
   });
 }
 

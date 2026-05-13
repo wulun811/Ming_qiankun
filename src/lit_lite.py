@@ -18,6 +18,10 @@ from lit_rule import (
     resolve_per_system,
 )
 from lit_dx import write_dx
+try:
+    from diagnosis_llm_hint import fetch_llm_hint_sync
+except ImportError:
+    fetch_llm_hint_sync = None
 from archiver_exclude import is_system_excluded
 
 try:
@@ -39,6 +43,43 @@ GHOST_FIELDS = {
 }
 DEFERRED_IDS = {"MDL-115", "MDL-116", "NET-117", "MEM-118", "MEM-119", "MEM-120"}
 
+
+
+# LLM hint 配置
+_llm_hint_config = None
+
+def _load_llm_hint_config():
+    global _llm_hint_config
+    if _llm_hint_config is not None:
+        return _llm_hint_config
+    try:
+        from config_loader import load_config
+        config, _, _ = load_config()
+        _llm_hint_config = config.get("diagnosis", {}).get("llm_hint", {})
+    except Exception:
+        _llm_hint_config = {}
+    return _llm_hint_config
+
+def _fetch_and_update_hint(system, rule_id, name, confidence, severity, evidence, inference, status):
+    config = _load_llm_hint_config()
+    if not config.get("enabled"):
+        return
+    endpoint = config.get("endpoint", "")
+    api_key_env = config.get("api_key_env", "")
+    api_key = os.environ.get(api_key_env, "")
+    timeout = config.get("timeout_sec", 2.0)
+    max_tokens = config.get("max_tokens", 100)
+    detail = inference or name
+    try:
+        hint = fetch_llm_hint_sync(
+            rule_id, detail, evidence,
+            endpoint=endpoint, api_key=api_key,
+            timeout=timeout, max_tokens=max_tokens,
+        )
+        if hint:
+            write_dx(system, rule_id, name, confidence, severity, evidence, inference, "llm_hinted", llm_hint=hint)
+    except Exception:
+        pass
 
 def _push_p0_diagnoses(p0_hits):
     """P0 诊断秒级推送到土行孙 gateway，失败静默"""
@@ -248,6 +289,7 @@ def diagnose():
 
         for rule in diseases:
             rule_id = rule.get("id", "")
+            if rule.get('disabled'): continue  # 跳过已禁用的规则
             severity = rule.get("severity", "P2")
             scope = rule.get("scope", "observable")
             name = rule.get("name", rule_id)
@@ -424,6 +466,12 @@ def diagnose():
                         dx.get("inference", ""),
                         "pending",
                     )
+                    import threading
+                    threading.Thread(
+                        target=_fetch_and_update_hint,
+                        args=(dx["system"], dx["rule_id"], dx["name"], dx["confidence"], dx["severity"], dx.get("evidence", []), dx.get("inference", ""), "pending"),
+                        daemon=True,
+                    ).start()
             if promoted > 0:
                 write_dx(
                     "all",

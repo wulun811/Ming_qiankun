@@ -1,0 +1,538 @@
+msgid ""
+msgstr ""
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "  %s %s: %s (阈值 %s)"
+msgstr "  %s %s: %s (threshold %s)"
+
+msgid "  %s %s\\uff1a%s\\uff08阈值 %s\\uff09"
+msgstr "  %s %s: %s (threshold %s)"
+
+msgid "  ... 还有 %d 种"
+msgstr "  ... %d more"
+
+msgid "  \\u26a0\\ufe0f  部分可诊\\uff1a%d"
+msgstr "  \\u26a0\\ufe0f  Partially diagnosable: %d"
+
+msgid "  \\u2705 可诊断\\uff1a%d"
+msgstr "  \\u2705 Diagnosable: %d"
+
+msgid "  \\u2713 技能文件已部署"
+msgstr "  Skill file deployed"
+
+msgid "  \\u2713 插件已启用"
+msgstr "  Plugin enabled"
+
+msgid "  \\u2713 插件文件已部署"
+msgstr "  Plugin files deployed"
+
+msgid "  \\u274c 不能诊断\\uff1a%d"
+msgstr "  \\u274c Cannot diagnose: %d"
+
+msgid "  ⚠ hermes 命令超时，请手动运行: hermes plugins enable mingjing-probe"
+msgstr "  hermes timed out, run: hermes plugins enable mingjing-probe"
+
+msgid "  ⚠ 插件启用失败: %s"
+msgstr "  Plugin enable failed: %s"
+
+msgid "  ⚠ 未找到 hermes 命令，请手动运行: hermes plugins enable mingjing-probe"
+msgstr "  hermes not found, run: hermes plugins enable mingjing-probe"
+
+msgid "  健康复位: ming reset <system>                      (强制标记健康，新疾病出现自动取消)"
+msgstr "  Health reset: ming reset <system> (force healthy)"
+
+msgid "  单元文件: %s"
+msgstr "  Unit: %s"
+
+msgid "  归档疾病: ming archive-disease <fault_id> -s <system>  (永久隐藏，不计入健康)"
+msgstr "  Archive: ming archive-disease <fault_id> -s <system>"
+
+msgid "  忽略本次: ming ignore <fault_id> -s <system>       (疾病仍然记录，仅报告不展示)"
+msgstr "  Dismiss: ming ignore <fault_id> -s <system>"
+
+msgid "  总规则数\\uff1a%d"
+msgstr "  Total rules: %d"
+
+msgid "  恢复显示: ming restore <fault_id> -s <system>       (取消忽略/归档)"
+msgstr "  Restore: ming restore <fault_id> -s <system>"
+
+msgid "  技能目标: %s"
+msgstr "  Skill: %s"
+
+msgid "  插件目标: %s"
+msgstr "  Plugin: %s"
+
+msgid "  数据库无记录，仅清理文件残留"
+msgstr "  No records, cleaning remnants"
+
+msgid "  服务 %s 已安装并启动"
+msgstr "  Service %s started"
+
+msgid "  服务 %s 已移除"
+msgstr "  Service %s removed"
+
+msgid "  源: %s"
+msgstr "  Source: %s"
+
+msgid "  生成时间\\uff1a%s"
+msgstr "  Generated: %s"
+
+msgid "  距今\\uff1a%.0f 分钟（%s）"
+msgstr "  %.0f min ago (%s)"
+
+msgid "  运行 'ming known-probes add --name <名称>' 添加到已知列表"
+msgstr "  Run 'ming known-probes add --name <name>' to add to known list"
+
+msgid "  采样事件\\uff1a%d 条"
+msgstr "  Sampled events: %d"
+
+msgid " (%s)"
+msgstr " (%s)"
+
+msgid " [已复位]"
+msgstr " [Reset]"
+
+msgid "%.0f 文件"
+msgstr "%.0f  files"
+
+msgid "API 认证令牌（可选）"
+msgstr "API token (optional)"
+
+msgid "JSON 输出"
+msgstr "JSON output"
+
+msgid "PID 文件: %s"
+msgstr "PID file: %s"
+
+msgid "PID 文件损坏"
+msgstr "PID file corrupted"
+
+msgid "PID: %d (%s)"
+msgstr "PID: %d (%s)"
+
+msgid "Session ID（step-sequence 用）"
+msgstr "Session ID (step-sequence)"
+
+msgid "Verified: %d OK, %d bad (%d total)"
+msgstr "Verified: %d OK, %d bad (%d total)"
+
+msgid "Web 面板（导出/启动服务）"
+msgstr "Web panel (export/serve)"
+
+msgid "\\U0001f534未上报"
+msgstr "\\U0001f534 Never reported"
+
+msgid "\\U0001f7e0离线%.0fm"
+msgstr "\\U0001f7e0 Offline %.0fm"
+
+msgid "\\U0001f7e0离线%dh"
+msgstr "\\U0001f7e0 Offline %dh"
+
+msgid "\\U0001f7e2在线%.0fs前"
+msgstr "\\U0001f7e2 Online %.0fs ago"
+
+msgid "\\n  \\u26a0 单元文件不存在 (%s)"
+msgstr "\\n  \\u26a0 Unit file not found (%s)"
+
+msgid "\\n  已知探针（三层合并）:"
+msgstr "\\n  Known probes (3-layer merged):"
+
+msgid "\\n  所有发现的探针已在已知列表中"
+msgstr "\\n  All discovered probes are already in the known list"
+
+msgid "\\n  提示\\uff1a运行 'ming service install' 安装服务"
+msgstr "\\n  Hint: run 'ming service install' to install the service"
+
+msgid "\\n[dry-run] 未执行变更"
+msgstr "\\n[dry-run] No changes made"
+
+msgid "\\n建议动作\\uff1a"
+msgstr "\\nSuggested action:"
+
+msgid "\\n总体状态: %s"
+msgstr "\\nOverall: %s"
+
+msgid "\\n正在运行诊断引擎..."
+msgstr "\\nRunning diagnosis..."
+
+msgid "\\u2500\\u2500 每系统诊病数 \\u2500\\u2500"
+msgstr "-- Diseases/System --"
+
+msgid "\\u26a0\\ufe0f  部分可诊断（%d 种）\\uff1a"
+msgstr "\\u26a0\\ufe0f  Partially diagnosable (%d): "
+
+msgid "\\u2705 可诊断（%d 种）\\uff1a"
+msgstr "\\u2705 Diagnosable (%d): "
+
+msgid "\\u274c 不能诊断（%d 种）\\uff1a"
+msgstr "\\u274c Cannot diagnose (%d): "
+
+msgid "── ⚙ 系统 ──"
+msgstr "-- System --"
+
+msgid "── ⚠️ 需要关注 ──"
+msgstr "-- Needs Attention --"
+
+msgid "── ✓ 健康 ──"
+msgstr "-- Healthy --"
+
+msgid "── 可用操作 ──"
+msgstr "-- Actions --"
+
+msgid "── 📐 資源足跡 · Resource Footprint ──"
+msgstr "-- Resource Footprint --"
+
+msgid "一键安装乾坤镜探针到 Hermes Agent"
+msgstr "Install probe to Hermes Agent"
+
+msgid "乾坤镜 CLI v0.11.9m — OpenClaw 监控与诊断工具"
+msgstr "Mingjing CLI v0.11.9m — OpenClaw Monitor & Diagnostic Tool"
+
+msgid "乾坤镜 Hermes 插件一键安装"
+msgstr "Mingjing Hermes Plugin Install"
+
+msgid "乾坤镜 v%s"
+msgstr "Mingjing v%s"
+
+msgid "乾坤镜健康状态"
+msgstr "Mingjing Health Status"
+
+msgid "乾坤镜分诊报告"
+msgstr "Mingjing Triage Report"
+
+msgid "乾坤镜自健康检查"
+msgstr "Mingjing Self Check"
+
+msgid "事件类型\\uff1a%d 种"
+msgstr "Event types: %d"
+
+msgid "保留数据库记录"
+msgstr "Keep DB records"
+
+msgid "停止/恢复观察某个实例"
+msgstr "Stop/resume observing"
+
+msgid "健康复位某实例（强制标记健康，新疾病出现取消）"
+msgstr "Health reset (force healthy, auto-reverts)"
+
+msgid "分组维度（token-breakdown 用）"
+msgstr "Group by (token-breakdown)"
+
+msgid "分诊失败\\uff1a数据库不存在或为空"
+msgstr "Triage failed: DB not found or empty"
+
+msgid "分诊快照\\uff1a不存在"
+msgstr "Triage snapshot: not found"
+
+msgid "分诊快照状态"
+msgstr "Triage Snapshot"
+
+msgid "升级失败: %s"
+msgstr "Upgrade failed: %s"
+
+msgid "升级成功: v%s → v%s"
+msgstr "Upgraded: v%s -> v%s"
+
+msgid "取消忽略/取消归档"
+msgstr "Unignore/unarchive"
+
+msgid "可用查询: %s"
+msgstr "Available queries: %s"
+
+msgid "启动: ming start"
+msgstr "Start: ming start"
+
+msgid "安装完成\\uff01重启 Hermes 后乾坤镜探针自动生效。"
+msgstr "Install complete! Probe activates on Hermes restart."
+
+msgid "实例名称"
+msgstr "Instance name"
+
+msgid "实例名称（uninstall 必需）"
+msgstr "Instance name (required for uninstall)"
+
+msgid "已停止"
+msgstr "Stopped"
+
+msgid "已取消"
+msgstr "Cancelled"
+
+msgid "已安装技能: %s"
+msgstr "Skill installed: %s"
+
+msgid "已是最新版 v%s"
+msgstr "Already latest v%s"
+
+msgid "已重启（systemd）"
+msgstr "Restarted (systemd)"
+
+msgid "建议执行"
+msgstr "Suggested"
+
+msgid "归档%d"
+msgstr "Archived %d"
+
+msgid "归档某疾病（永久隐藏，不计入健康）"
+msgstr "Archive disease (permanently hidden)"
+
+msgid "快照读取失败\\uff1a%s"
+msgstr "Snapshot read failed: %s"
+
+msgid "忽略%d"
+msgstr "Dismissed %d"
+
+msgid "忽略某疾病（疾病仍然记录，仅报告不展示）"
+msgstr "Ignore disease (still recorded, hidden from report)"
+
+msgid "报告读取失败\\uff1a%s"
+msgstr "Report read failed: %s"
+
+msgid "按系统名称过滤"
+msgstr "Filter by system"
+
+msgid "探针名称（add/remove 必需）"
+msgstr "Probe name (required for add/remove)"
+
+msgid "探针管理（列出 / 安全卸载）"
+msgstr "Probe management (list/uninstall)"
+
+msgid "数据库不存在: %s"
+msgstr "DB not found: %s"
+
+msgid "无事件数据"
+msgstr "No event data"
+
+msgid "无归档文件"
+msgstr "No archive files"
+
+msgid "无待确认的诊断"
+msgstr "No pending diagnoses"
+
+msgid "无日志记录"
+msgstr "No log records"
+
+msgid "无疾病"
+msgstr "No disease"
+
+msgid "无结果"
+msgstr "No results"
+
+msgid "时间窗口秒数（step-loop / token-spike 用）"
+msgstr "Time window (sec) (step-loop/token-spike)"
+
+msgid "暂无已注册的探针"
+msgstr "No registered probes"
+
+msgid "月度报告：格式 YYYY_MM，如 2026_04"
+msgstr "Monthly report: YYYY_MM, eg 2026_04"
+
+msgid "有效"
+msgstr "Valid"
+
+msgid "未知命令: %s"
+msgstr "Unknown command: %s"
+
+msgid "未知查询: %s"
+msgstr "Unknown query: %s"
+
+msgid "查看/验证配置"
+msgstr "View/validate config"
+
+msgid "查看健康复位状态"
+msgstr "Health reset status"
+
+msgid "查看归档器运行状态"
+msgstr "Archiver status"
+
+msgid "查看系统健康状态"
+msgstr "System health check"
+
+msgid "查询出错: %s"
+msgstr "Query error: %s"
+
+msgid "查询名称（recent_p0/recent_p1/event_stats/system_stats/unconfirmed）"
+msgstr "Query name (recent_p0/recent_p1/event_stats/system_stats/unconfirmed)"
+
+msgid "查询名称（可用查询见 --help）"
+msgstr "Query name (see --help)"
+
+msgid "校验: %d 通过, %d 不匹配 (共 %d 条)"
+msgstr "Verified: %d OK, %d bad (%d total)"
+
+msgid "校验哈希链完整性"
+msgstr "Verify hash chain"
+
+msgid "校验失败\\uff1a"
+msgstr "Validation failed:"
+
+msgid "校验通过"
+msgstr "Validation passed"
+
+msgid "检查所有适配器状态与版本兼容性"
+msgstr "Check adapters status & compatibility"
+
+msgid "模式: %s"
+msgstr "Mode: %s"
+
+msgid "模式: %s (MING_MODE)"
+msgstr "Mode: %s (MING_MODE)"
+
+msgid "正在扫描归档库 + 热轨..."
+msgstr "Scanning archive + hot..."
+
+msgid "正常"
+msgstr "Normal"
+
+msgid "状态: 未启动"
+msgstr "Status: not started"
+
+msgid "环境变量（可选）:"
+msgstr "Env vars (optional):"
+
+msgid "生成结构化诊断报告"
+msgstr "Generate diagnostic report"
+
+msgid "疾病规则ID"
+msgstr "Disease rule ID"
+
+msgid "确认删除（forget 操作必需）"
+msgstr "Confirm deletion (required)"
+
+msgid "突增倍数阈值（token-spike 用，默认 3.0）"
+msgstr "Spike threshold (token-spike, default 3.0)"
+
+msgid "管理 OpenCode 守护进程系统服务"
+msgstr "Manage OpenCode daemon service"
+
+msgid "管理冷轨归档文件"
+msgstr "Manage cold archive"
+
+msgid "管理命令（删除 session / 压缩数据库 / 清理测试数据）"
+msgstr "Admin (forget/vacuum/cleanup)"
+
+msgid "管理已知探针列表（三层：内置/用户/自动发现）"
+msgstr "Manage known probes (built-in/user/auto)"
+
+msgid "管理技能插件"
+msgstr "Manage skill plugins"
+
+msgid "系统名称"
+msgstr "System name"
+
+msgid "系统名称（不指定则全部）"
+msgstr "System name (all if empty)"
+
+msgid "紧凑列出所有实例及其健康状态"
+msgstr "List all instances with health"
+
+msgid "绑定地址（默认 127.0.0.1）"
+msgstr "Bind address (default 127.0.0.1)"
+
+msgid "结束时间（同上，默认 now）"
+msgstr "End time (same format, default now)"
+
+msgid "统计天数（默认 1 天）"
+msgstr "Days (default 1)"
+
+msgid "要删除的 Session ID（forget 操作必需）"
+msgstr "Session ID to delete (required)"
+
+msgid "诊断回放时间线（事件→诊断演化）"
+msgstr "Diagnostic replay (event->diagnosis)"
+
+msgid "诊断完成"
+msgstr "Diagnosis done"
+
+msgid "诊断管理（列表/详情/确认/导出）"
+msgstr "Diagnosis (list/detail/confirm/export)"
+
+msgid "详细程度"
+msgstr "Detail level"
+
+msgid "请运行: ming triage run"
+msgstr "Run: ming triage run"
+
+msgid "起始时间戳（Unix epoch）"
+msgstr "Start timestamp (Unix epoch)"
+
+msgid "起始时间（30m/2h/1d 或 Unix 时间戳）"
+msgstr "Start time (30m/2h/1d or Unix ts)"
+
+msgid "跳过确认"
+msgstr "Skip confirm"
+
+msgid "跳过自动诊断"
+msgstr "Skip auto-diagnosis"
+
+msgid "过期"
+msgstr "Expired"
+
+msgid "运行中"
+msgstr "Running"
+
+msgid "运行分诊诊断"
+msgstr "Run triage diagnosis"
+
+msgid "运行系统自检（退出码: 0=正常 1=警告 2=严重）"
+msgstr "Self-check (exit: 0=OK 1=warn 2=critical)"
+
+msgid "运行预定义查询（v0.11.9m 扩展）"
+msgstr "Run predefined query (v0.11.9m)"
+
+msgid "近 %d 条无 %s 诊断记录"
+msgstr "No %s diagnoses in last %d"
+
+msgid "返回条数上限"
+msgstr "Max results"
+
+msgid "返回条数上限（默认 20）"
+msgstr "Max results (default 20)"
+
+msgid "采样事件\\uff1a%d 条"
+msgstr "Sampled events: %d"
+
+msgid "重启服务..."
+msgstr "Restarting..."
+
+msgid "错误: 卸载需要指定探针名称"
+msgstr "Error: uninstall requires probe name"
+
+msgid "错误: 找不到 hermes 插件，请确保乾坤镜安装完整"
+msgstr "Error: hermes plugin not found, check Mingjing install"
+
+msgid "错误: 找不到守护进程脚本 %s"
+msgstr "Error: daemon script not found: %s"
+
+msgid "错误: 文件路径超出归档目录"
+msgstr "Error: path outside archive dir"
+
+msgid "错误: 无效的技能名称"
+msgstr "Error: invalid skill name"
+
+msgid "错误: 无效的文件名"
+msgstr "Error: invalid filename"
+
+msgid "错误: 源文件必须在用户目录下"
+msgstr "Error: source must be under home dir"
+
+msgid "错误: 需要 --confirm 确认删除"
+msgstr "Error: --confirm required for deletion"
+
+msgid "错误: 需要 --name 参数"
+msgstr "Error: --name flag required"
+
+msgid "错误: 需要 --session-id 参数"
+msgstr "Error: --session-id required"
+
+msgid "错误: 需要指定实例名称"
+msgstr "Error: instance name required"
+
+msgid "项目: %s"
+msgstr "Project: %s"
+
+msgid "预演模式（只显示不执行）"
+msgstr "Dry run (show only)"
+

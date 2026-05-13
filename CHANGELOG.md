@@ -1,5 +1,101 @@
 # Changelog
 
+## [v0.11.14.post1] — 2026-05-13
+
+### Added
+- 病症描述国际化：`diseases.yaml` 157 个病征全部新增 `description_en` 英文字段
+- 前端证据项 `descEn()` 按 `LANG` 显示英文描述
+
+### Fixed
+- Web 英文界面 `Occurrence1times` 超框 — CSS + 模板空格 + I18N 改用 `×`
+- 版本号全仓库一致化：README.md / README_en.md / AGENTS.md / SKILL.md / docs
+
+## [v0.11.14] — 2026-05-13
+
+### Added
+- 国际化（i18n）：CLI + Web 面板中英双语切换，`MING_LANG=en` 环境变量，Web 右上角按钮
+- 病症描述国际化：`diseases.yaml` 157 个病征全部新增 `description_en` 英文字段
+- 探针暂停观察机制：前端点击暂停 → `~/.ming/.paused/{system}` 即时生效，无需重启归档器
+- Node.js 探针 `probe_node.js` 升级 v0.11.9m（新增 `_isPaused()` 暂停检查）
+
+### Fixed
+- 病症名称国际化：`diseases.yaml` 157 个病征新增 `name_en` 英文字段
+- Web 英文界面证据描述显示中文 → 前端 `descEn()` 按语言选择 `description_en` / `description`
+- Web 英文界面 `Occurrence1times` 超框 — CSS width 55px→90px + 模板空格 + I18N 改用 `×`
+- Archiver 内存优化：RSS 62MB→23MB（↓63%）— 持久连接、惰性初始化、`os.scandir()`
+- Archiver WAL checkpoint + 空闲降频：CPU 19%→0.4%（↓98%），WAL 333MB→0MB
+- Archiver 添加 `__del__` 自动关闭连接，修复测试锁库回归
+- Archiver `system` 字段类型检查，防止 dict 用作 dict key
+- lit_lite: `integrity_score` 插入逻辑修复 + LIMIT 处理 + 强制重新加载
+- lit_rule: 正确处理 `//` 开头的规则
+- 修复适配器测试 + 删除不稳定真实 API 测试
+
+### Security
+- XSS onclick 转义（index.html 4 处 `esc()`）
+- credential_vault 线程竞争锁（`threading.Lock()`）
+- POST body 上限 65536（server.py 6 个 handler）
+- Path traversal 校验（`../` + `..` + `/` 拦截）
+- cli_disease.py `tbl` 未定义 → `diagnoses_query()` 修复
+- XSS alerts/coverage 转义（index.html 2 处 `esc()`）
+
+### Changed
+- 版本号 v0.11.13 → v0.11.14：全仓库 7 文件 19 处同步更新
+- tusunsun probe-node.js: 合并暂停机制（ES Module + stop() + performance.now() 保持）
+
+## [v0.11.13] — 2026-05-12
+
+### Added
+- 探针适配器：AgentScope (M17, v1.0.18-1.0.19) + Semantic Kernel (M18, v1.40.0-1.41.3)
+- OpenHands 适配器升级至 v1.19.1 SDK
+- Plan30: LLM 辅助诊断推测 — 异步 hint + 熔断 + 配置化
+- diseases.yaml: 全部 157 个病症添加 `depends` 字段 + SYS-004 `env_thresholds`
+- diseases.yaml: 转换为标准 PyYAML 格式（兼容 `strict=True`）
+- 三层探针发现机制（内置/用户配置/自动发现）
+- LlamaIndex + CrewAI 适配器发布
+
+### Fixed
+- 诊断引擎 CPU 修复
+- Archiver 守护线程死亡自动重启（限流 10 次/60 秒）
+- 修复 daemon/server 独立运行时 `sys.path` 缺失导致的 ModuleNotFoundError
+- 探针发现：`discover` 命令重复 I/O，`list_known_probes` 支持 `discovered` 参数
+- WAL 恢复 + 集群监控
+- Go opencode 探针暂停检查 + CLI exclude 同步 `~/.ming/.paused/`
+
+### Changed
+- diseases.yaml 禁用 SYS-009 + 正确添加 always_on 标记
+- 501 测试覆盖（5 轮测试盲区修复）
+
+## [v0.11.12.post12] — 2026-05-09
+
+### Fixed
+- archiver_daemon: 守护线程死亡自动重启（限流 10 次/60 秒）
+
+## [v0.11.12.post11] — 2026-05-09
+
+### Added
+- LlamaIndex + CrewAI 适配器发布
+- 501 测试覆盖（5 轮测试盲区修复）
+
+### Fixed
+- 诊断引擎 CPU 修复
+- WAL 恢复 + 集群监控
+- 探针发现：`discover` 命令重复 I/O，`list_known_probes` 支持 `discovered` 参数
+
+## [v0.11.12.post10] — 2026-05-09
+
+### Fixed
+- 修复 daemon/server 独立运行时 `sys.path` 缺失导致的 ModuleNotFoundError
+
+## [v0.11.12.post9] — 2026-05-09
+
+### Added
+- 三层探针发现机制（内置/用户配置/自动发现）
+- Go opencode 探针暂停检查（`~/.ming/.paused/`）
+
+### Fixed
+- CLI exclude 同步 `.paused` 文件
+- OVERRIDE 添加 `probe_opencode_wrapper.go` 同步到餐桌
+
 ## [v0.11.12.post8] — 2026-05-08
 
 ### Fixed

@@ -17,6 +17,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 SRC_DIR = PROJECT_ROOT / "src"
 sys.path.insert(0, str(SRC_DIR))
+os.environ["MING_LANG"] = "zh"
 
 from probe_uni import ProbeUni
 from archiver import Archiver

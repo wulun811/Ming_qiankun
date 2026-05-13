@@ -43,6 +43,7 @@ python3 src/plugins/web_dashboard/server.py --daemon --host 0.0.0.0 --port 18088
 ```
 
 访问 `http://localhost:18088` 查看实时数据。
+Web 面板右上角 `EN` / `中文` 按钮可切换语言（localStorage 持久化）。CLI 设置环境变量 `MING_LANG=en` 可切换为英文输出。
 
 ## 健康检查
 

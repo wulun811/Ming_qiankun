@@ -269,7 +269,7 @@ python3 src/cli.py triage run
 | **事件详情** | 点击事件查看完整 JSON payload |
 | **Self-Health** | 探针自身健康指标（发射成功率、缓冲队列、完整性） |
 
-面板每 15 秒自动刷新，也可手动点击刷新按钮。
+面板每 15 秒自动刷新，也可手动点击刷新按钮。右上角 `EN` / `中文` 按钮一键中英切换（localStorage 持久化）。CLI 输出默认中文，设置 `MING_LANG=en` 环境变量可切换为英文输出。
 
 ### CLI 使用（OpenClaw 用户首选）
 

@@ -16,6 +16,7 @@ TRIAGE_SNAPSHOT = Path.home() / ".ming" / "triage_snapshot.json"
 
 from archiver_compress import resolve_payload
 from archiver_util import diagnoses_query
+from i18n import _
 
 try:
     from archiver_summary import summarize_month, load_monthly_summary
@@ -31,10 +32,10 @@ ICON_HL = {
     "critical": "🔴",
 }
 LABEL_HL = {
-    "healthy": "健康",
-    "sub_healthy": "亚健康",
-    "warning": "警告",
-    "critical": "危急",
+    "healthy": _("健康"),
+    "sub_healthy": _("亚健康"),
+    "warning": _("警告"),
+    "critical": _("危急"),
 }
 SEV_ORDER = {"P0": 0, "P1": 1, "P2": 2, "META": 3}
 HL_ORDER = {"critical": 0, "warning": 1, "sub_healthy": 2, "healthy": 3}
@@ -154,12 +155,12 @@ def _fmt_duration(seconds):
 
 def _fmt_probe(pt):
     if pt == -2:
-        return "系统级"
+        return _("系统级")
     if pt < 0:
-        return "未上报"
+        return _("未上报")
     if pt > 120:
-        return f"离线({_fmt_duration(pt)})"
-    return f"在线({_fmt_duration(pt)}前)"
+        return _("离线(%s)") % _fmt_duration(pt)
+    return _("在线(%s前)") % _fmt_duration(pt)
 
 
 def _probe_status_icon(pt):
@@ -183,10 +184,10 @@ def _fmt_month_report(year_month, rows):
         by_system[sys_name]["errors"] += r["error_count"]
         by_system[sys_name]["types"][r["event_type"]] = r["total_count"]
 
-    ym_pretty = year_month.replace("_", "年") + "月"
+    ym_pretty = year_month.replace("_", _("年")) + _("月")
     sys.stdout.write(f"╔══════════════════════════════════════════════════════════╗\n")
     sys.stdout.write(
-        f"║  乾坤镜月度报告  {ym_pretty}                                 ║\n"
+        _("║  乾坤镜月度报告  %s                                 ║\n") % ym_pretty
     )
     sys.stdout.write(
         f"╚══════════════════════════════════════════════════════════╝\n\n"
@@ -199,8 +200,10 @@ def _fmt_month_report(year_month, rows):
         rate = (ok / total * 100) if total > 0 else 0
         top = sorted(info["types"].items(), key=lambda x: -x[1])[:3]
         top_str = "  ".join(f"{t}:{c}" for t, c in top)
+        total_str = f"{total:>8,}"
         sys.stdout.write(
-            f"  {sys_name:<12s}  {total:>8,} 事件  |  {errors:>5} 错误  |  成功 {rate:.1f}%\n"
+            _("  %-12s  %s 事件  |  %d 错误  |  成功 %.1f%%\n")
+            % (sys_name, total_str, errors, rate)
         )
         if top_str:
             sys.stdout.write(f"    top: {top_str}\n")
@@ -208,8 +211,10 @@ def _fmt_month_report(year_month, rows):
 
     total_all = sum(v["total"] for v in by_system.values())
     total_err = sum(v["errors"] for v in by_system.values())
-    sys.stdout.write(f"── 合计: {total_all:,} 事件, {total_err:,} 错误 ──\n")
-    sys.stdout.write(f"  报告生成: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+    sys.stdout.write(
+        _("── 合计: %s 事件, %s 错误 ──\n") % (f"{total_all:,}", f"{total_err:,}")
+    )
+    sys.stdout.write(_("  报告生成: %s\n") % time.strftime("%Y-%m-%d %H:%M:%S"))
 
 
 def _cmd_monthly_report(year_month, json_output):
@@ -245,9 +250,9 @@ def _cmd_monthly_report(year_month, json_output):
             conn.close()
             conn = None
             if result and "skipped" in result:
-                print(f"月度报告 {year_month}: {result['skipped']}")
+                print(_("月度报告 %s: %s") % (year_month, result["skipped"]))
             elif result and "error" in result:
-                print(f"月度报告 {year_month} 聚合失败: {result['error']}")
+                print(_("月度报告 %s 聚合失败: %s") % (year_month, result["error"]))
             else:
                 conn2 = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
                 conn2.row_factory = sqlite3.Row
@@ -307,9 +312,9 @@ def cmd_report(args):
                 conn.close()
 
     if not diagnoses and not getattr(args, "json", False):
-        period = f"近 {days} 天" if days > 1 else "近 24 小时"
+        period = _("近 %d 天") % days if days > 1 else _("近 24 小时")
         print(f"╔══════════════════════════════════════════════════════════╗")
-        print(f"║  乾坤镜体检报告  ({period})  ✓ 无异常                        ║")
+        print(_("║  乾坤镜体检报告  (%s)  ✓ 无异常                        ║") % period)
         print(f"╚══════════════════════════════════════════════════════════╝")
         return
 
@@ -616,28 +621,36 @@ def cmd_report(args):
         return
 
     # ==== 终端输出 ====
-    period = f"近 {days} 天" if days > 1 else "近 24 小时"
+    period = _("近 %d 天") % days if days > 1 else _("近 24 小时")
     print(f"╔══════════════════════════════════════════════════════════╗")
-    print(f"║  乾坤镜体检报告  ({period})                                  ║")
+    print(_("║  乾坤镜体检报告  (%s)                                  ║") % period)
     print(f"╚══════════════════════════════════════════════════════════╝")
     print()
 
     # 总体健康
     hl_icon = ICON_HL.get(global_worst, "⚪")
-    hl_label = LABEL_HL.get(global_worst, "未知")
-    print(f"── 总体健康: {hl_label} {hl_icon} ──")
+    hl_label = LABEL_HL.get(global_worst, _("未知"))
+    print(_("── 总体健康: %s %s ──") % (hl_label, hl_icon))
     parts = [
-        f"实例{len(cards)}(健康{len(healthy_list)} 亚健康{sum(1 for c in cards.values() if c['health'] == 'sub_healthy')} 警告{sum(1 for c in cards.values() if c['health'] == 'warning')} 危急{sum(1 for c in cards.values() if c['health'] == 'critical')})"
+        _("实例%d(健康%d 亚健康%d 警告%d 危急%d)")
+        % (
+            len(cards),
+            len(healthy_list),
+            sum(1 for c in cards.values() if c["health"] == "sub_healthy"),
+            sum(1 for c in cards.values() if c["health"] == "warning"),
+            sum(1 for c in cards.values() if c["health"] == "critical"),
+        )
     ]
     parts.append(
-        f"活跃疾病{len(total_active_faults)}(P0×{total_p0} P1×{total_p1} P2×{total_p2})"
+        _("活跃疾病%d(P0×%d P1×%d P2×%d)")
+        % (len(total_active_faults), total_p0, total_p1, total_p2)
     )
-    parts.append(f"探针: 🟢{probe_online} 🟠{probe_offline} 🔴{probe_never}")
+    parts.append(_("探针: 🟢%d 🟠%d 🔴%d") % (probe_online, probe_offline, probe_never))
     extra = []
     if total_dismissed:
-        extra.append(f"忽略中{total_dismissed}")
+        extra.append(_("忽略中%d") % total_dismissed)
     if total_archived:
-        extra.append(f"已归档{total_archived}")
+        extra.append(_("已归档%d") % total_archived)
     if extra:
         parts.append(" ".join(extra))
     print(f"  {'  '.join(parts)}")
@@ -645,7 +658,7 @@ def cmd_report(args):
 
     # 需要关注的实例
     if unhealthy:
-        print("── ⚠️ 需要关注 ──")
+        print(_("── ⚠️ 需要关注 ──"))
         print()
         for c in unhealthy:
             pt = probe_times.get(c["display_name"], -1)
@@ -655,12 +668,12 @@ def cmd_report(args):
             triage_info = per_system_triage.get(c["display_name"], {})
             if triage_info:
                 if triage_info.get("ready", 0) < 0:
-                    triage_str = "  系统级"
+                    triage_str = _("  系统级")
                 else:
-                    triage_str = f"  本系统{triage_info.get('ready', 0)}"
+                    triage_str = _("  本系统%d") % triage_info.get("ready", 0)
 
             hl_icon = ICON_HL.get(c["health"], "⚪")
-            hl_label = LABEL_HL.get(c["health"], "未知")
+            hl_label = LABEL_HL.get(c["health"], _("未知"))
             print(
                 f"  {hl_icon} {hl_label} | {c['display_name']}    {probe_icon}{probe_str}{triage_str}"
             )
@@ -676,12 +689,12 @@ def cmd_report(args):
                 cnt = f.get("occurrence_count", 0)
 
                 print(f"     {sev_icon} {sev} | {fid} {name}")
-                print(f"        首次{first}  持续{dur}  共{cnt}次")
+                print(_("        首次%s  持续%s  共%d次") % (first, dur, cnt))
             print()
 
     # 健康实例
     if healthy_list:
-        print("── ✓ 健康 ──")
+        print(_("── ✓ 健康 ──"))
         names = []
         for c in healthy_list:
             pt = probe_times.get(c["display_name"], -1)
@@ -691,7 +704,7 @@ def cmd_report(args):
             if triage_info.get("ready", 0) < 0:
                 triage = ""
             elif triage_info:
-                triage = f"本系统{triage_info.get('ready', '-')}"
+                triage = _("本系统%s") % triage_info.get("ready", "-")
             else:
                 triage = ""
             names.append(
@@ -706,7 +719,7 @@ def cmd_report(args):
         for f in c["archived"]:
             archived_all.append((c["display_name"], f))
     if archived_all:
-        print(f"── ⚐ 已归档 ──")
+        print(_("── ⚐ 已归档 ──"))
         for sys_name, f in archived_all[:20]:
             sev = f.get("severity", "?")
             sev_icon = ICON_SEV.get(sev, "⚪")
@@ -714,32 +727,39 @@ def cmd_report(args):
             name = f.get("diagnosis_name", "?")
             print(f"  [{sys_name}] {sev_icon} {sev} | {fid} {name}")
         if len(archived_all) > 20:
-            print(f"  ... 还有 {len(archived_all) - 20} 个")
+            print(_("  ... 还有 %d 个") % (len(archived_all) - 20))
         print()
 
     # 可用操作（不提供建议，只列操作）
-    print("── 可用操作 ──")
+    print(_("── 可用操作 ──"))
     print(
-        "  忽略本次: ming ignore <fault_id> -s <system>       (疾病仍然记录，仅报告不展示)"
+        _(
+            "  忽略本次: ming ignore <fault_id> -s <system>       (疾病仍然记录，仅报告不展示)"
+        )
     )
     print(
-        "  归档疾病: ming archive-disease <fault_id> -s <system>  (永久隐藏，不计入健康)"
+        _(
+            "  归档疾病: ming archive-disease <fault_id> -s <system>  (永久隐藏，不计入健康)"
+        )
     )
     print(
-        "  健康复位: ming reset <system>                      (强制标记健康，新疾病出现自动取消)"
+        _(
+            "  健康复位: ming reset <system>                      (强制标记健康，新疾病出现自动取消)"
+        )
     )
-    print("  恢复显示: ming restore <fault_id> -s <system>       (取消忽略/归档)")
+    print(_("  恢复显示: ming restore <fault_id> -s <system>       (取消忽略/归档)"))
     print()
 
     # 系统状态
-    print("── ⚙ 系统 ──")
+    print(_("── ⚙ 系统 ──"))
     arch_status = (
-        ("✓ 运行中" if archiver_alive else f"✗ 离线({archiver_age:.0f}s前)")
+        (_("✓ 运行中") if archiver_alive else _("✗ 离线(%.0fs前)") % archiver_age)
         if archiver_age != 999
-        else "✗ 从未启动"
+        else _("✗ 从未启动")
     )
     print(
-        f"  归档器{arch_status}    数据库{db_size:.1f}MB    热轨{hot_count}文件    冷轨{cold_count}文件"
+        _("  归档器%s    数据库%.1fMB    热轨%d文件    冷轨%d文件")
+        % (arch_status, db_size, hot_count, cold_count)
     )
     print()
 
@@ -773,7 +793,7 @@ def _proc_cpu(pid):
 
 
 def _print_footprint():
-    print("── 📐 資源足跡 · Resource Footprint ──")
+    print(_("── 📐 資源足跡 · Resource Footprint ──"))
 
     # 乾坤镜自身：读取归档器进程 RSS，离线时显示 0
     archiver_pid = None
@@ -814,7 +834,7 @@ def _print_footprint():
     if archiver_pid:
         print(f"  {'mingjing':<20s} RSS {self_rss:>5.0f} MB   CPU {self_cpu:>5.1f}%")
     else:
-        print(f"  {'mingjing':<20s} RSS     0 MB   CPU   0.0%  (离线)")
+        print(f"  {'mingjing':<20s} RSS     0 MB   CPU   0.0%  " + _("(离线)"))
 
     # 已注册系统
     if DB.exists():

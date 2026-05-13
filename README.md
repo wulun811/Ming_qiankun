@@ -6,7 +6,7 @@
 >
 > [🌏 English](./README_en.md) | [📖 完整手册](updocs/)
 
-[![Version](https://img.shields.io/badge/v0.11.13-blue)](https://pypi.org/project/mingjing/)
+[![Version](https://img.shields.io/badge/v0.11.14-blue)](https://pypi.org/project/mingjing/)
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-green.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-501%2F0%2F2-brightgreen)]()
@@ -14,7 +14,7 @@
 [![Dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen)]()
 [![Efficiency](https://img.shields.io/badge/0_LLM_·_0_Writeback_·_RSS%3C50MB-brightgreen)]()
 [![Storage](https://img.shields.io/badge/212K_events-196MB-brightgreen)]()
-[![Compression](https://img.shields.io/badge/v0.11.13_Compression-43%25-brightgreen)]()
+[![Compression](https://img.shields.io/badge/v0.11.14_Compression-43%25-brightgreen)]()
 [![PRs](https://img.shields.io/badge/PRs-welcome-orange)](https://github.com/wulun811/Ming_qiankun/pulls)
 
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-%E2%9C%93_verified-brightgreen)]()
@@ -138,6 +138,8 @@ ming web serve --port 18088
 # 浏览器打开 http://localhost:18088 或 http://<本机IP>:18088
 ```
 
+**语言切换**：Web 面板右上角 `EN` / `中文` 按钮一键中英切换，设置保存在浏览器 localStorage 中。CLI 输出默认中文，设置环境变量 `export MING_LANG=en` 可切换为英文。
+
 **自动更新**：Web 服务内置每 30 秒自动导出 data.json + 前端自动刷新，无需手动执行 export 命令。
 
 **局域网访问**：
@@ -199,10 +201,12 @@ docker run -d --name ming -p 18088:18088 ming
 | **LangChain** | Python | llm_invoke, tool_call, memory_retrieve | Pip 包 + monkey-patch |
 | **LlamaIndex** | Python | llm_invoke, memory_retrieve, agent_step | Python 探针 |
 | **CrewAI** | Python | agent_step, llm_invoke | Python 探针 |
-| OpenHands | Python | agent_step, llm_invoke, tool_call | Coming Soon |
-| AutoGPT | Python | agent_step, llm_invoke | Coming Soon |
+| **OpenHands** | Python | agent_step, llm_invoke, tool_call | ✅ Mock 测试通过（v1.19.1 SDK 兼容） |
+| AutoGPT | Python | agent_step, llm_invoke | ⚠️ Mock 测试通过（Classic 已停止维护） |
+| **AgentScope** | Python | llm_invoke, tool_call, agent_invoke | ✅ Mock + 真实测试通过（OpenTelemetry SpanProcessor，版本 1.0.18-1.0.19 兼容） |
+| **Semantic Kernel** | Python | llm_invoke, tool_call | ✅ Mock 测试通过（Monkey-patch + Filter，版本 1.40.0-1.41.3 兼容） |
 
-> 标记"Coming Soon"的适配器代码已实现，正在集成测试中，欢迎提前试用并反馈。
+> ✅ 标记的适配器已升级，支持最新版本框架。⚠️ AutoGPT Classic 已停止维护，建议等待 AutoGPT Platform 适配。
 
 ### 适配器升级检查清单
 
@@ -453,7 +457,7 @@ Business Source License 1.1 — 年收入 <$100K 的公司和个人免费商用�
 
 ---
 
-**乾坤镜 v0.11.13 — 为社区而生。**
+**乾坤镜 v0.11.14 — 为社区而生。**
 
 ---
 

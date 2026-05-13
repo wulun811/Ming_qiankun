@@ -17,6 +17,7 @@ def write_dx(
     status,
     cross_validated_by=None,
     original_confidence=None,
+    llm_hint=None,
 ):
     if not evidence:
         evidence = [{"summary": "无详细证据", "key_fields": {}}]
@@ -84,6 +85,8 @@ def write_dx(
         "status": status,
     }
 
+    if llm_hint:
+        diag["llm_hint"] = llm_hint
     if cross_validated_by:
         diag["cross_validated_by"] = cross_validated_by
     if original_confidence is not None:

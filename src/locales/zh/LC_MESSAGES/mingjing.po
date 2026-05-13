@@ -1,0 +1,538 @@
+msgid ""
+msgstr ""
+"Language: zh\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "  %s %s: %s (阈值 %s)"
+msgstr "  %s %s: %s (阈值 %s)"
+
+msgid "  %s %s\\uff1a%s\\uff08阈值 %s\\uff09"
+msgstr "  %s %s\\uff1a%s\\uff08阈值 %s\\uff09"
+
+msgid "  ... 还有 %d 种"
+msgstr "  ... 还有 %d 种"
+
+msgid "  \\u26a0\\ufe0f  部分可诊\\uff1a%d"
+msgstr "  \\u26a0\\ufe0f  部分可诊\\uff1a%d"
+
+msgid "  \\u2705 可诊断\\uff1a%d"
+msgstr "  \\u2705 可诊断\\uff1a%d"
+
+msgid "  \\u2713 技能文件已部署"
+msgstr "  \\u2713 技能文件已部署"
+
+msgid "  \\u2713 插件已启用"
+msgstr "  \\u2713 插件已启用"
+
+msgid "  \\u2713 插件文件已部署"
+msgstr "  \\u2713 插件文件已部署"
+
+msgid "  \\u274c 不能诊断\\uff1a%d"
+msgstr "  \\u274c 不能诊断\\uff1a%d"
+
+msgid "  ⚠ hermes 命令超时，请手动运行: hermes plugins enable mingjing-probe"
+msgstr "  ⚠ hermes 命令超时，请手动运行: hermes plugins enable mingjing-probe"
+
+msgid "  ⚠ 插件启用失败: %s"
+msgstr "  ⚠ 插件启用失败: %s"
+
+msgid "  ⚠ 未找到 hermes 命令，请手动运行: hermes plugins enable mingjing-probe"
+msgstr "  ⚠ 未找到 hermes 命令，请手动运行: hermes plugins enable mingjing-probe"
+
+msgid "  健康复位: ming reset <system>                      (强制标记健康，新疾病出现自动取消)"
+msgstr "  健康复位: ming reset <system>                      (强制标记健康，新疾病出现自动取消)"
+
+msgid "  单元文件: %s"
+msgstr "  单元文件: %s"
+
+msgid "  归档疾病: ming archive-disease <fault_id> -s <system>  (永久隐藏，不计入健康)"
+msgstr "  归档疾病: ming archive-disease <fault_id> -s <system>  (永久隐藏，不计入健康)"
+
+msgid "  忽略本次: ming ignore <fault_id> -s <system>       (疾病仍然记录，仅报告不展示)"
+msgstr "  忽略本次: ming ignore <fault_id> -s <system>       (疾病仍然记录，仅报告不展示)"
+
+msgid "  总规则数\\uff1a%d"
+msgstr "  总规则数\\uff1a%d"
+
+msgid "  恢复显示: ming restore <fault_id> -s <system>       (取消忽略/归档)"
+msgstr "  恢复显示: ming restore <fault_id> -s <system>       (取消忽略/归档)"
+
+msgid "  技能目标: %s"
+msgstr "  技能目标: %s"
+
+msgid "  插件目标: %s"
+msgstr "  插件目标: %s"
+
+msgid "  数据库无记录，仅清理文件残留"
+msgstr "  数据库无记录，仅清理文件残留"
+
+msgid "  服务 %s 已安装并启动"
+msgstr "  服务 %s 已安装并启动"
+
+msgid "  服务 %s 已移除"
+msgstr "  服务 %s 已移除"
+
+msgid "  源: %s"
+msgstr "  源: %s"
+
+msgid "  生成时间\\uff1a%s"
+msgstr "  生成时间\\uff1a%s"
+
+msgid "  距今\\uff1a%.0f 分钟（%s）"
+msgstr "  距今\\uff1a%.0f 分钟（%s）"
+
+msgid "  运行 'ming known-probes add --name <名称>' 添加到已知列表"
+msgstr "  运行 'ming known-probes add --name <名称>' 添加到已知列表"
+
+msgid "  采样事件\\uff1a%d 条"
+msgstr "  采样事件\\uff1a%d 条"
+
+msgid " (%s)"
+msgstr " (%s)"
+
+msgid " [已复位]"
+msgstr " [已复位]"
+
+msgid "%.0f 文件"
+msgstr "%.0f 文件"
+
+msgid "API 认证令牌（可选）"
+msgstr "API 认证令牌（可选）"
+
+msgid "JSON 输出"
+msgstr "JSON 输出"
+
+msgid "PID 文件: %s"
+msgstr "PID 文件: %s"
+
+msgid "PID 文件损坏"
+msgstr "PID 文件损坏"
+
+msgid "PID: %d (%s)"
+msgstr "PID: %d (%s)"
+
+msgid "Session ID（step-sequence 用）"
+msgstr "Session ID（step-sequence 用）"
+
+msgid "Verified: %d OK, %d bad (%d total)"
+msgstr "Verified: %d OK, %d bad (%d total)"
+
+msgid "Web 面板（导出/启动服务）"
+msgstr "Web 面板（导出/启动服务）"
+
+msgid "\\U0001f534未上报"
+msgstr "\\U0001f534未上报"
+
+msgid "\\U0001f7e0离线%.0fm"
+msgstr "\\U0001f7e0离线%.0fm"
+
+msgid "\\U0001f7e0离线%dh"
+msgstr "\\U0001f7e0离线%dh"
+
+msgid "\\U0001f7e2在线%.0fs前"
+msgstr "\\U0001f7e2在线%.0fs前"
+
+msgid "\\n  \\u26a0 单元文件不存在 (%s)"
+msgstr "\\n  \\u26a0 单元文件不存在 (%s)"
+
+msgid "\\n  已知探针（三层合并）:"
+msgstr "\\n  已知探针（三层合并）:"
+
+msgid "\\n  所有发现的探针已在已知列表中"
+msgstr "\\n  所有发现的探针已在已知列表中"
+
+msgid "\\n  提示\\uff1a运行 'ming service install' 安装服务"
+msgstr "\\n  提示\\uff1a运行 'ming service install' 安装服务"
+
+msgid "\\n[dry-run] 未执行变更"
+msgstr "\\n[dry-run] 未执行变更"
+
+msgid "\\n建议动作\\uff1a"
+msgstr "\\n建议动作\\uff1a"
+
+msgid "\\n总体状态: %s"
+msgstr "\\n总体状态: %s"
+
+msgid "\\n正在运行诊断引擎..."
+msgstr "\\n正在运行诊断引擎..."
+
+msgid "\\u2500\\u2500 每系统诊病数 \\u2500\\u2500"
+msgstr "\\u2500\\u2500 每系统诊病数 \\u2500\\u2500"
+
+msgid "\\u26a0\\ufe0f  部分可诊断（%d 种）\\uff1a"
+msgstr "\\u26a0\\ufe0f  部分可诊断（%d 种）\\uff1a"
+
+msgid "\\u2705 可诊断（%d 种）\\uff1a"
+msgstr "\\u2705 可诊断（%d 种）\\uff1a"
+
+msgid "\\u274c 不能诊断（%d 种）\\uff1a"
+msgstr "\\u274c 不能诊断（%d 种）\\uff1a"
+
+msgid "── ⚙ 系统 ──"
+msgstr "── ⚙ 系统 ──"
+
+msgid "── ⚠️ 需要关注 ──"
+msgstr "── ⚠️ 需要关注 ──"
+
+msgid "── ✓ 健康 ──"
+msgstr "── ✓ 健康 ──"
+
+msgid "── 可用操作 ──"
+msgstr "── 可用操作 ──"
+
+msgid "── 📐 資源足跡 · Resource Footprint ──"
+msgstr "── 📐 資源足跡 · Resource Footprint ──"
+
+msgid "一键安装乾坤镜探针到 Hermes Agent"
+msgstr "一键安装乾坤镜探针到 Hermes Agent"
+
+msgid "乾坤镜 CLI v0.11.9m — OpenClaw 监控与诊断工具"
+msgstr "乾坤镜 CLI v0.11.9m — OpenClaw 监控与诊断工具"
+
+msgid "乾坤镜 Hermes 插件一键安装"
+msgstr "乾坤镜 Hermes 插件一键安装"
+
+msgid "乾坤镜 v%s"
+msgstr "乾坤镜 v%s"
+
+msgid "乾坤镜健康状态"
+msgstr "乾坤镜健康状态"
+
+msgid "乾坤镜分诊报告"
+msgstr "乾坤镜分诊报告"
+
+msgid "乾坤镜自健康检查"
+msgstr "乾坤镜自健康检查"
+
+msgid "事件类型\\uff1a%d 种"
+msgstr "事件类型\\uff1a%d 种"
+
+msgid "保留数据库记录"
+msgstr "保留数据库记录"
+
+msgid "停止/恢复观察某个实例"
+msgstr "停止/恢复观察某个实例"
+
+msgid "健康复位某实例（强制标记健康，新疾病出现取消）"
+msgstr "健康复位某实例（强制标记健康，新疾病出现取消）"
+
+msgid "分组维度（token-breakdown 用）"
+msgstr "分组维度（token-breakdown 用）"
+
+msgid "分诊失败\\uff1a数据库不存在或为空"
+msgstr "分诊失败\\uff1a数据库不存在或为空"
+
+msgid "分诊快照\\uff1a不存在"
+msgstr "分诊快照\\uff1a不存在"
+
+msgid "分诊快照状态"
+msgstr "分诊快照状态"
+
+msgid "升级失败: %s"
+msgstr "升级失败: %s"
+
+msgid "升级成功: v%s → v%s"
+msgstr "升级成功: v%s → v%s"
+
+msgid "取消忽略/取消归档"
+msgstr "取消忽略/取消归档"
+
+msgid "可用查询: %s"
+msgstr "可用查询: %s"
+
+msgid "启动: ming start"
+msgstr "启动: ming start"
+
+msgid "安装完成\\uff01重启 Hermes 后乾坤镜探针自动生效。"
+msgstr "安装完成\\uff01重启 Hermes 后乾坤镜探针自动生效。"
+
+msgid "实例名称"
+msgstr "实例名称"
+
+msgid "实例名称（uninstall 必需）"
+msgstr "实例名称（uninstall 必需）"
+
+msgid "已停止"
+msgstr "已停止"
+
+msgid "已取消"
+msgstr "已取消"
+
+msgid "已安装技能: %s"
+msgstr "已安装技能: %s"
+
+msgid "已是最新版 v%s"
+msgstr "已是最新版 v%s"
+
+msgid "已重启（systemd）"
+msgstr "已重启（systemd）"
+
+msgid "建议执行"
+msgstr "建议执行"
+
+msgid "归档%d"
+msgstr "归档%d"
+
+msgid "归档某疾病（永久隐藏，不计入健康）"
+msgstr "归档某疾病（永久隐藏，不计入健康）"
+
+msgid "快照读取失败\\uff1a%s"
+msgstr "快照读取失败\\uff1a%s"
+
+msgid "忽略%d"
+msgstr "忽略%d"
+
+msgid "忽略某疾病（疾病仍然记录，仅报告不展示）"
+msgstr "忽略某疾病（疾病仍然记录，仅报告不展示）"
+
+msgid "报告读取失败\\uff1a%s"
+msgstr "报告读取失败\\uff1a%s"
+
+msgid "按系统名称过滤"
+msgstr "按系统名称过滤"
+
+msgid "探针名称（add/remove 必需）"
+msgstr "探针名称（add/remove 必需）"
+
+msgid "探针管理（列出 / 安全卸载）"
+msgstr "探针管理（列出 / 安全卸载）"
+
+msgid "数据库不存在: %s"
+msgstr "数据库不存在: %s"
+
+msgid "无事件数据"
+msgstr "无事件数据"
+
+msgid "无归档文件"
+msgstr "无归档文件"
+
+msgid "无待确认的诊断"
+msgstr "无待确认的诊断"
+
+msgid "无日志记录"
+msgstr "无日志记录"
+
+msgid "无疾病"
+msgstr "无疾病"
+
+msgid "无结果"
+msgstr "无结果"
+
+msgid "时间窗口秒数（step-loop / token-spike 用）"
+msgstr "时间窗口秒数（step-loop / token-spike 用）"
+
+msgid "暂无已注册的探针"
+msgstr "暂无已注册的探针"
+
+msgid "月度报告：格式 YYYY_MM，如 2026_04"
+msgstr "月度报告：格式 YYYY_MM，如 2026_04"
+
+msgid "有效"
+msgstr "有效"
+
+msgid "未知命令: %s"
+msgstr "未知命令: %s"
+
+msgid "未知查询: %s"
+msgstr "未知查询: %s"
+
+msgid "查看/验证配置"
+msgstr "查看/验证配置"
+
+msgid "查看健康复位状态"
+msgstr "查看健康复位状态"
+
+msgid "查看归档器运行状态"
+msgstr "查看归档器运行状态"
+
+msgid "查看系统健康状态"
+msgstr "查看系统健康状态"
+
+msgid "查询出错: %s"
+msgstr "查询出错: %s"
+
+msgid "查询名称（recent_p0/recent_p1/event_stats/system_stats/unconfirmed）"
+msgstr "查询名称（recent_p0/recent_p1/event_stats/system_stats/unconfirmed）"
+
+msgid "查询名称（可用查询见 --help）"
+msgstr "查询名称（可用查询见 --help）"
+
+msgid "校验: %d 通过, %d 不匹配 (共 %d 条)"
+msgstr "校验: %d 通过, %d 不匹配 (共 %d 条)"
+
+msgid "校验哈希链完整性"
+msgstr "校验哈希链完整性"
+
+msgid "校验失败\\uff1a"
+msgstr "校验失败\\uff1a"
+
+msgid "校验通过"
+msgstr "校验通过"
+
+msgid "检查所有适配器状态与版本兼容性"
+msgstr "检查所有适配器状态与版本兼容性"
+
+msgid "模式: %s"
+msgstr "模式: %s"
+
+msgid "模式: %s (MING_MODE)"
+msgstr "模式: %s (MING_MODE)"
+
+msgid "正在扫描归档库 + 热轨..."
+msgstr "正在扫描归档库 + 热轨..."
+
+msgid "正常"
+msgstr "正常"
+
+msgid "状态: 未启动"
+msgstr "状态: 未启动"
+
+msgid "环境变量（可选）:"
+msgstr "环境变量（可选）:"
+
+msgid "生成结构化诊断报告"
+msgstr "生成结构化诊断报告"
+
+msgid "疾病规则ID"
+msgstr "疾病规则ID"
+
+msgid "确认删除（forget 操作必需）"
+msgstr "确认删除（forget 操作必需）"
+
+msgid "突增倍数阈值（token-spike 用，默认 3.0）"
+msgstr "突增倍数阈值（token-spike 用，默认 3.0）"
+
+msgid "管理 OpenCode 守护进程系统服务"
+msgstr "管理 OpenCode 守护进程系统服务"
+
+msgid "管理冷轨归档文件"
+msgstr "管理冷轨归档文件"
+
+msgid "管理命令（删除 session / 压缩数据库 / 清理测试数据）"
+msgstr "管理命令（删除 session / 压缩数据库 / 清理测试数据）"
+
+msgid "管理已知探针列表（三层：内置/用户/自动发现）"
+msgstr "管理已知探针列表（三层：内置/用户/自动发现）"
+
+msgid "管理技能插件"
+msgstr "管理技能插件"
+
+msgid "系统名称"
+msgstr "系统名称"
+
+msgid "系统名称（不指定则全部）"
+msgstr "系统名称（不指定则全部）"
+
+msgid "紧凑列出所有实例及其健康状态"
+msgstr "紧凑列出所有实例及其健康状态"
+
+msgid "绑定地址（默认 127.0.0.1）"
+msgstr "绑定地址（默认 127.0.0.1）"
+
+msgid "结束时间（同上，默认 now）"
+msgstr "结束时间（同上，默认 now）"
+
+msgid "统计天数（默认 1 天）"
+msgstr "统计天数（默认 1 天）"
+
+msgid "要删除的 Session ID（forget 操作必需）"
+msgstr "要删除的 Session ID（forget 操作必需）"
+
+msgid "诊断回放时间线（事件→诊断演化）"
+msgstr "诊断回放时间线（事件→诊断演化）"
+
+msgid "诊断完成"
+msgstr "诊断完成"
+
+msgid "诊断管理（列表/详情/确认/导出）"
+msgstr "诊断管理（列表/详情/确认/导出）"
+
+msgid "详细程度"
+msgstr "详细程度"
+
+msgid "请运行: ming triage run"
+msgstr "请运行: ming triage run"
+
+msgid "起始时间戳（Unix epoch）"
+msgstr "起始时间戳（Unix epoch）"
+
+msgid "起始时间（30m/2h/1d 或 Unix 时间戳）"
+msgstr "起始时间（30m/2h/1d 或 Unix 时间戳）"
+
+msgid "跳过确认"
+msgstr "跳过确认"
+
+msgid "跳过自动诊断"
+msgstr "跳过自动诊断"
+
+msgid "过期"
+msgstr "过期"
+
+msgid "运行中"
+msgstr "运行中"
+
+msgid "运行分诊诊断"
+msgstr "运行分诊诊断"
+
+msgid "运行系统自检（退出码: 0=正常 1=警告 2=严重）"
+msgstr "运行系统自检（退出码: 0=正常 1=警告 2=严重）"
+
+msgid "运行预定义查询（v0.11.9m 扩展）"
+msgstr "运行预定义查询（v0.11.9m 扩展）"
+
+msgid "近 %d 条无 %s 诊断记录"
+msgstr "近 %d 条无 %s 诊断记录"
+
+msgid "返回条数上限"
+msgstr "返回条数上限"
+
+msgid "返回条数上限（默认 20）"
+msgstr "返回条数上限（默认 20）"
+
+msgid "采样事件\\uff1a%d 条"
+msgstr "采样事件\\uff1a%d 条"
+
+msgid "重启服务..."
+msgstr "重启服务..."
+
+msgid "错误: 卸载需要指定探针名称"
+msgstr "错误: 卸载需要指定探针名称"
+
+msgid "错误: 找不到 hermes 插件，请确保乾坤镜安装完整"
+msgstr "错误: 找不到 hermes 插件，请确保乾坤镜安装完整"
+
+msgid "错误: 找不到守护进程脚本 %s"
+msgstr "错误: 找不到守护进程脚本 %s"
+
+msgid "错误: 文件路径超出归档目录"
+msgstr "错误: 文件路径超出归档目录"
+
+msgid "错误: 无效的技能名称"
+msgstr "错误: 无效的技能名称"
+
+msgid "错误: 无效的文件名"
+msgstr "错误: 无效的文件名"
+
+msgid "错误: 源文件必须在用户目录下"
+msgstr "错误: 源文件必须在用户目录下"
+
+msgid "错误: 需要 --confirm 确认删除"
+msgstr "错误: 需要 --confirm 确认删除"
+
+msgid "错误: 需要 --name 参数"
+msgstr "错误: 需要 --name 参数"
+
+msgid "错误: 需要 --session-id 参数"
+msgstr "错误: 需要 --session-id 参数"
+
+msgid "错误: 需要指定实例名称"
+msgstr "错误: 需要指定实例名称"
+
+msgid "项目: %s"
+msgstr "项目: %s"
+
+msgid "预演模式（只显示不执行）"
+msgstr "预演模式（只显示不执行）"
+

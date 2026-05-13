@@ -6,7 +6,7 @@
 >
 > [🌏 中文](./README.md) | [📖 Full Docs](updocs/)
 
-[![Version](https://img.shields.io/badge/v0.11.13-blue)](https://pypi.org/project/mingjing/)
+[![Version](https://img.shields.io/badge/v0.11.14-blue)](https://pypi.org/project/mingjing/)
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-green.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-501%2F0%2F2-brightgreen)]()
@@ -14,7 +14,7 @@
 [![Dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen)]()
 [![Efficiency](https://img.shields.io/badge/0_LLM_·_0_Writeback_·_RSS%3C50MB-brightgreen)]()
 [![Storage](https://img.shields.io/badge/212K_events-196MB-brightgreen)]()
-[![Compression](https://img.shields.io/badge/v0.11.13_Compression-43%25-brightgreen)]()
+[![Compression](https://img.shields.io/badge/v0.11.14_Compression-43%25-brightgreen)]()
 [![PRs](https://img.shields.io/badge/PRs-welcome-orange)](https://github.com/wulun811/Ming_qiankun/pulls)
 
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-%E2%9C%93_verified-brightgreen)]()
@@ -139,6 +139,8 @@ ming web serve
 ming web serve --port 18088
 # Open http://localhost:18088 or http://<your-IP>:18088
 ```
+
+**Language Toggle**: Click `EN` / `中文` in the top-right corner of the Web dashboard to switch between Chinese and English. The setting is persisted in browser localStorage. CLI output defaults to Chinese; set `export MING_LANG=en` for English output.
 
 **Auto-update**: Web service has built-in 30s auto-export data.json + frontend auto-refresh.
 
@@ -452,7 +454,7 @@ Business Source License 1.1 — Free production use for companies/individuals wi
 
 ---
 
-**Mingjing v0.11.13 — Built for the community.**
+**Mingjing v0.11.14 — Built for the community.**
 
 ---
 

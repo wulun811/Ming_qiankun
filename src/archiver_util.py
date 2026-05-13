@@ -1,7 +1,7 @@
 # archiver_util.py —— 0.11.9m 归档器小工具
-# 职责：心跳/错误日志/vacuum/期约更新（纯工具函数）
+# 聃责：心跳/错误日志/vacuum/期约更新（纯工具函数）
 # 安全：输入输出明确，无隐式 DB 访问
-import json, time, sqlite3
+import json, time, sqlite3, traceback, shutil
 from pathlib import Path
 
 
@@ -15,18 +15,21 @@ def write_heartbeat(heartbeat_path):
 def log_error(error_log_path, error, consecutive_count=0):
     try:
         Path(error_log_path).parent.mkdir(parents=True, exist_ok=True)
+        tb = ""
+        if hasattr(error, '__traceback__') and error.__traceback__:
+            tb = traceback.format_exc()
         entry = {
             "ts": time.time(),
             "error": str(error),
             "consecutive_count": consecutive_count,
             "type": type(error).__name__,
+            "traceback": tb,
         }
         with open(error_log_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     except Exception:
         try:
             import sys
-
             print(f"[archiver] log_error failed: {error}", file=sys.stderr)
         except Exception:
             pass
@@ -42,13 +45,28 @@ def run_vacuum(db_path, last_vacuum, vacuum_interval):
         before = db.stat().st_size
     except OSError:
         return None
-    # VACUUM 需要约 2x DB 大小的磁盘空间
+    wal = db.with_suffix(".db-wal")
     try:
-        import shutil
-
+        wal_before = wal.stat().st_size if wal.exists() else 0
+    except OSError:
+        wal_before = 0
+    try:
+        conn = sqlite3.connect(str(db))
+        conn.execute("PRAGMA busy_timeout=5000")
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        conn.close()
+    except Exception:
+        return None
+    try:
+        wal_after = wal.stat().st_size if wal.exists() else 0
+    except OSError:
+        wal_after = 0
+    if wal_after < wal_before:
+        return wal_before - wal_after
+    try:
         free = shutil.disk_usage(str(db.parent)).free
         if free < before * 2:
-            return None  # 磁盘空间不足，跳过
+            return None
     except Exception:
         pass
     try:

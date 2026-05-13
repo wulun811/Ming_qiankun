@@ -54,6 +54,7 @@ class Archiver:
     ERROR_LOG = Path.home() / ".ming" / ".archiver_errors.jsonl"
     FLUSH_INTERVAL = float(os.getenv("WQ_ARCHIVER_FLUSH_SEC", "1.0"))
     VACUUM_INTERVAL = float(os.getenv("WQ_ARCHIVER_VACUUM_HOURS", "24")) * 3600
+    CHECKPOINT_INTERVAL = float(os.getenv("MING_CHECKPOINT_INTERVAL_SEC", "300"))
     TRIAGE_INTERVAL = float(os.getenv("MING_TRIAGE_INTERVAL_SEC", "1800"))
     COLD_TTL_DAYS = int(os.getenv("MING_COLD_TTL_DAYS", "7"))
 
@@ -71,10 +72,12 @@ class Archiver:
         self._alive = True
         self._daemon_thread = None
         self._last_vacuum = 0
+        self._last_checkpoint = 0
         self._triage_running = threading.Event()
         self._last_backup = 0
         self._startup_time = time.time()
         self._trim_counter = 0
+        self._idle_cycles = 0
         self.warm_days = 14
         self.min_compress_bytes = MIN_COMPRESS_BYTES
         self._last_compress = 0
@@ -85,6 +88,7 @@ class Archiver:
         except OSError:
             self._libc = None  # musl libc (Alpine/Docker) or non-Linux
         self._scan_hot_dir()
+        self._conn = None  # 持久连接，在 daemon 线程中惰性创建
 
     def _open_db(self, read_only=False, timeout=5):
         conn = sqlite3.connect(str(self.DB))
@@ -170,7 +174,9 @@ class Archiver:
         if not staging_files:
             self._heartbeat()
             return 0
-        conn = self._open_db()
+        if self._conn is None:
+            self._conn = self._open_db()
+        conn = self._conn
         got_events = False
         total_events = 0
         try:
@@ -184,14 +190,18 @@ class Archiver:
                     total_events += file_events
                     got_events = True
                 conn.commit()
-        finally:
-            conn.close()
+        except Exception:
+            conn.rollback()
+            raise
+        conn.rollback()
         self._heartbeat()
         self._auto_backup()
         if purge_expired:
-            self._purge_expired_events()
+            self._purge_expired_events(conn)
+            conn.rollback()
         if apply_confirmations:
-            self._apply_confirmations()
+            self._apply_confirmations(conn)
+            conn.rollback()
         self._maybe_run_triage()
         self._maybe_cleanup_cold()
         self._compress_old_events()
@@ -230,6 +240,8 @@ class Archiver:
                 continue
             etype = ev.get("event_type", "")
             system = ev.get("system", "")
+            if not isinstance(system, str):
+                continue  # P0: system 必须是字符串，防止 dict 用作 dict key
             if not system and etype not in ("__expect__", "__fulfill__"):
                 continue
             if etype == "__expect__":
@@ -447,15 +459,19 @@ class Archiver:
     def _log_error(self, error, consecutive_count=0):
         _log(str(self.ERROR_LOG), error, consecutive_count)
 
-    def _apply_confirmations(self):
+    def _apply_confirmations(self, conn=None):
         tbl = self._diagnoses_table()
-        conn = self._open_db()
+        own = False
+        if conn is None:
+            conn = self._open_db()
+            own = True
         try:
             apply_confirmations(conn, tbl, str(self.CONFIRMATIONS))
         except Exception:
             pass
         finally:
-            conn.close()
+            if own:
+                conn.close()
 
     def _maybe_run_triage(self):
         if trigger_triage:
@@ -483,14 +499,18 @@ class Archiver:
                 except Exception:
                     pass
 
-    def _purge_expired_events(self):
+    def _purge_expired_events(self, conn=None):
         try:
             tbl = self._diagnoses_table()
-            conn = self._open_db()
+            own = False
+            if conn is None:
+                conn = self._open_db()
+                own = True
             try:
                 purge_expired(conn, tbl)
             finally:
-                conn.close()
+                if own:
+                    conn.close()
         except Exception as e:
             self._log_error(e)
 
@@ -504,13 +524,23 @@ class Archiver:
             return
         cutoff = now - self.COLD_TTL_DAYS * 86400
         removed = 0
-        for cf in sorted(self.COLD.glob("*.jsonl")):
-            try:
-                if cf.stat().st_mtime < cutoff:
-                    cf.unlink()
-                    removed += 1
-            except Exception:
-                pass
+        try:
+            with os.scandir(str(self.COLD)) as it:
+                entries = [
+                    (e.name, e.stat().st_mtime)
+                    for e in it
+                    if e.name.endswith(".jsonl") and e.is_file()
+                ]
+            entries.sort(key=lambda x: x[1])
+            for name, mtime in entries:
+                if mtime < cutoff:
+                    try:
+                        (self.COLD / name).unlink()
+                        removed += 1
+                    except Exception:
+                        pass
+        except Exception:
+            pass
         self._last_cold_cleanup = now
         if removed:
             self._log_error(
@@ -637,6 +667,12 @@ class Archiver:
                         if len(batch) >= 500:
                             self._commit_batch(conn, batch)
                             batch = []
+                            gc.collect()
+                            if self._libc:
+                                try:
+                                    self._libc.malloc_trim(0)
+                                except Exception:
+                                    pass
                     if batch:
                         self._commit_batch(conn, batch)
                         batch = []
@@ -658,6 +694,22 @@ class Archiver:
             return 0
         self._last_vacuum = time.time()
         return result
+
+    def checkpoint(self):
+        now = time.time()
+        if now - self._last_checkpoint < self.CHECKPOINT_INTERVAL:
+            return 0
+        try:
+            conn = self._open_db()
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            conn.close()
+            self._last_checkpoint = now
+            wal = self.DB.with_suffix(".db-wal")
+            if wal.exists():
+                return wal.stat().st_size
+            return 0
+        except Exception:
+            return 0
 
     def start_daemon(self):
         self._alive = True
@@ -682,7 +734,12 @@ class Archiver:
         def loop():
             while self._alive:
                 try:
-                    self.run_once()
+                    events = self.run_once()
+                    self.checkpoint()
+                    if events > 0:
+                        self._idle_cycles = 0
+                    else:
+                        self._idle_cycles += 1
                     self.vacuum()
                     self._consecutive_errors = 0
                 except Exception as e:
@@ -707,13 +764,30 @@ class Archiver:
                     if _libc:
                         _libc.malloc_trim(0)
                     self._cleanup_stale_staging()
-                time.sleep(self.FLUSH_INTERVAL)
+                idle_sleep = min(self._idle_cycles * 0.5, 10.0) if self._idle_cycles > 10 else self.FLUSH_INTERVAL
+                time.sleep(idle_sleep)
             self._alive = False
 
         self._daemon_thread = threading.Thread(target=loop, daemon=True)
         self._daemon_thread.start()
 
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
+
+    def close(self):
+        conn = getattr(self, '_conn', None)
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        self._conn = None
+
     def stop(self):
         self._alive = False
         if self._daemon_thread:
             self._daemon_thread.join(timeout=10)
+        self.close()

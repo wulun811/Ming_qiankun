@@ -42,9 +42,9 @@ def _daemonize():
     pid = os.fork()
     if pid > 0:
         # 父进程打印 PID 后退出
-        print(f"[{MODE}] 守护进程已启动 (PID={pid})")
-        print(f"[{MODE}] 停止: python3 src/ming.py stop")
-        print(f"[{MODE}] 状态: python3 src/ming.py status")
+        print(_("[{mode}] 守护进程已启动 (PID={pid})").format(mode=MODE, pid=pid))
+        print(_("[{mode}] 停止: python3 src/ming.py stop").format(mode=MODE))
+        print(_("[{mode}] 状态: python3 src/ming.py status").format(mode=MODE))
         sys.exit(0)
 
     # 子进程成为 session leader
@@ -389,8 +389,8 @@ def cmd_restart():
 
 def cmd_status():
     """状态命令"""
-    print(f"模式: {MODE}")
-    print(f"PID 文件: {PID_FILE}")
+    print(_("模式: %s") % MODE)
+    print(_("PID 文件: %s") % PID_FILE)
     if PID_FILE.exists():
         try:
             pid = int(PID_FILE.read_text().strip())
@@ -399,17 +399,23 @@ def cmd_status():
                 os.kill(pid, 0)
             except OSError:
                 running = False
-            print(f"PID: {pid} ({'运行中' if running else '已停止'})")
+            status_str = _("运行中") if running else _("已停止")
+            print(_("PID: %d (%s)") % (pid, status_str))
         except ValueError:
-            print("PID 文件损坏")
+            print(_("PID 文件损坏"))
     else:
-        print("状态: 未启动")
+        print(_("状态: 未启动"))
 
     if MODE == "cluster":
         print(
-            f"数据库: {os.getenv('WQ_DB_HOST', '127.0.0.1')}:{os.getenv('WQ_DB_PORT', '3306')}/{os.getenv('WQ_DB_NAME', 'ming')}"
+            "数据库: %s:%s/%s"
+            % (
+                os.getenv("WQ_DB_HOST", "127.0.0.1"),
+                os.getenv("WQ_DB_PORT", "3306"),
+                os.getenv("WQ_DB_NAME", "ming"),
+            )
         )
-        print(f"项目: {os.getenv('WQ_PROJECT_ID', 'default')}")
+        print(_("项目: %s") % os.getenv("WQ_PROJECT_ID", "default"))
 
 
 def cmd_web_start(args):
@@ -465,7 +471,7 @@ def cmd_show_systemd_services():
     python = sys.executable
 
     archiver_service = f"""[Unit]
-Description=乾坤镜 Archiver ({MODE})
+Description={_("乾坤镜 Archiver ({mode})").format(mode=MODE)}
 After=network.target
 
 [Service]
@@ -486,7 +492,7 @@ WantedBy=multi-user.target
 """
 
     web_service = f"""[Unit]
-Description=乾坤镜 Web Dashboard
+Description={_("乾坤镜 Web Dashboard")}
 After=ming-archiver.service
 Wants=ming-archiver.service
 
@@ -610,7 +616,7 @@ def cmd_uninstall_service():
 def cmd_upgrade():
     """升级到最新版并自动重启"""
     old = VERSION
-    print(f"乾坤镜 v{old}")
+    print(_("乾坤镜 v%s") % old)
     r = subprocess.run(
         [sys.executable, "-m", "pip", "install", "--upgrade", "mingjing"],
         capture_output=True,
@@ -618,11 +624,11 @@ def cmd_upgrade():
         timeout=120,
     )
     if r.returncode:
-        print(f"升级失败: {r.stderr.strip() or r.stdout.strip()}")
+        print(_("升级失败: %s") % (r.stderr.strip() or r.stdout.strip()))
         sys.exit(1)
     out = (r.stdout or "").lower()
     if "already up-to-date" in out or "already satisfied" in out:
-        print(f"已是最新版 v{old}")
+        print(_("已是最新版 v%s") % old)
         return
     try:
         from importlib.metadata import version as _v2
@@ -630,9 +636,9 @@ def cmd_upgrade():
         new = _v2("mingjing")
     except Exception:
         new = old
-    print(f"升级成功: v{old} → v{new}")
+    print(_("升级成功: v%s → v%s") % (old, new))
     if PID_FILE.exists():
-        print("重启服务...")
+        print(_("重启服务..."))
         cmd_restart()
     else:
         r2 = subprocess.run(
@@ -640,22 +646,25 @@ def cmd_upgrade():
             capture_output=True,
             timeout=15,
         )
-        print("已重启（systemd）" if r2.returncode == 0 else "启动: ming start")
+        print(_("已重启（systemd）") if r2.returncode == 0 else _("启动: ming start"))
 
 
 def cmd_main():
     """主入口"""
+    from i18n import init_i18n, _
+
+    init_i18n()
     if len(sys.argv) < 2:
-        print(f"乾坤镜 v{VERSION}")
+        print(_("乾坤镜 v%s") % VERSION)
         print("start|stop|restart|status|upgrade|web|service")
-        print(f"模式: {MODE} (MING_MODE)")
+        print(_("模式: %s (MING_MODE)") % MODE)
         sys.exit(1)
 
     cmd = sys.argv[1]
     if cmd in ("--help", "-h"):
-        print(f"乾坤镜 v{VERSION}")
+        print(_("乾坤镜 v%s") % VERSION)
         print("start|stop|restart|status|upgrade|web|service")
-        print(f"模式: {MODE} (MING_MODE)")
+        print(_("模式: %s (MING_MODE)") % MODE)
         sys.exit(0)
     if cmd in ("--version", "-v"):
         print(f"ming {VERSION}")
@@ -691,7 +700,7 @@ def cmd_main():
         elif svc_args.action == "uninstall":
             cmd_uninstall_service()
     else:
-        print(f"未知命令: {cmd}")
+        print(_("未知命令: %s") % cmd)
         sys.exit(1)
 
 

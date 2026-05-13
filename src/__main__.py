@@ -7,7 +7,7 @@ def main():
     args = sys.argv[1:]
 
     if not args or args[0] in ("-h", "--help"):
-        print("乾坤镜 Mingjing v0.11.11")
+        print("乾坤镜 Mingjing v0.11.14.post1")
         print()
         print("Usage:")
         print("  python -m mingjing demo     Emit a test event")

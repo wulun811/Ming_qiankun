@@ -73,6 +73,10 @@ ls ~/.ming/cold/ | grep tusunsun | tail -5
 | 归档器显示 tusunsun 离线 | 无事件超过 N 分钟 | 检查客户端是否连接到 tusunsun gateway 产生了对话 |
 | Web 面板看不到 tusunsun | 未注册/白名单过滤 | Mingjing `KNOWN_PROBES` 包含 tusunsun，无需额外配置 |
 
+## 语言切换
+
+Web 面板右上角 `EN` / `中文` 按钮一键中英切换（localStorage 持久化）。CLI 输出默认中文，设置 `export MING_LANG=en` 可切换为英文。
+
 ## 升级后端（归档器 + Web 面板）
 
 ```bash

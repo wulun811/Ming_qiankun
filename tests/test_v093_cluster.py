@@ -3,6 +3,8 @@
 # 用法: python tests/test_v093_cluster.py
 import sys, os, time, json, shutil, unittest
 from pathlib import Path
+
+os.environ["MING_LANG"] = "zh"
 from unittest.mock import MagicMock, patch
 
 # 测试环境

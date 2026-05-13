@@ -330,6 +330,7 @@ class TestDowngrade(unittest.TestCase):
         archiver.min_compress_bytes = 50
         archiver._last_compress = 0
         archiver._compress_old_events()
+        archiver.close()
         del archiver
         # Checkpoint WAL so downgrade script's writes are visible
         fixer = sqlite3.connect(str(self.db))

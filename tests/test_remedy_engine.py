@@ -7,6 +7,8 @@ _src = Path(__file__).parent.parent / "src"
 if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 
+os.environ["MING_LANG"] = "zh"
+
 from remedy_engine import (
     _render,
     _pv,

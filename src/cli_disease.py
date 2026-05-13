@@ -2,6 +2,7 @@
 # 职责：忽略/归档/复位/恢复/实例列表 — 操作态命令（写入 JSON 状态文件）
 import json, sqlite3, time, sys
 from pathlib import Path
+from i18n import _
 
 sys.path.insert(0, str(Path(__file__).parent))
 from archiver_util import diagnoses_query
@@ -90,7 +91,7 @@ def cmd_ignore(args):
     fault_id = getattr(args, "fault_id", "")
     system = getattr(args, "system", "")
     if not fault_id or not system:
-        print("用法: ming ignore <fault_id> -s <system>")
+        print(_("用法: ming ignore <fault_id> -s <system>"))
         sys.exit(1)
 
     key = f"{fault_id}:{system}"
@@ -100,7 +101,7 @@ def cmd_ignore(args):
         "expires_at": time.time() + 24 * 3600,
     }
     _save_json(DISMISSED_PATH, data)
-    print(f"已忽略: {key}（24小时后过期，疾病仍然记录，仅报告不展示）")
+    print(_("已忽略: %s（24小时后过期，疾病仍然记录，仅报告不展示）") % key)
 
 
 def cmd_archive_disease(args):
@@ -108,14 +109,14 @@ def cmd_archive_disease(args):
     fault_id = getattr(args, "fault_id", "")
     system = getattr(args, "system", "")
     if not fault_id or not system:
-        print("用法: ming archive-disease <fault_id> -s <system>")
+        print(_("用法: ming archive-disease <fault_id> -s <system>"))
         sys.exit(1)
 
     key = f"{fault_id}:{system}"
     data = _load_json(ARCHIVED_PATH)
     data[key] = {"archived_at": time.time()}
     _save_json(ARCHIVED_PATH, data)
-    print(f"已归档: {key}（永久隐藏，不计入健康评估）")
+    print(_("已归档: %s（永久隐藏，不计入健康评估）") % key)
 
 
 def cmd_restore(args):
@@ -123,7 +124,7 @@ def cmd_restore(args):
     fault_id = getattr(args, "fault_id", "")
     system = getattr(args, "system", "")
     if not fault_id or not system:
-        print("用法: ming restore <fault_id> -s <system>")
+        print(_("用法: ming restore <fault_id> -s <system>"))
         sys.exit(1)
 
     key = f"{fault_id}:{system}"
@@ -137,29 +138,29 @@ def cmd_restore(args):
             restored = True
 
     if restored:
-        print(f"已恢复: {key}")
+        print(_("已恢复: %s") % key)
     else:
-        print(f"未找到: {key}（可能未被忽略/归档）")
+        print(_("未找到: %s（可能未被忽略/归档）") % key)
 
 
 def cmd_reset(args):
     """健康复位：强制标记某实例为健康"""
     system = getattr(args, "system", "")
     if not system:
-        print("用法: ming reset <system>")
+        print(_("用法: ming reset <system>"))
         sys.exit(1)
 
     data = _load_json(RESETS_PATH)
     data[system] = time.time()
     _save_json(RESETS_PATH, data)
-    print(f"已复位: {system} → 健康（新疾病出现时自动取消）")
+    print(_("已复位: %s → 健康（新疾病出现时自动取消）") % system)
 
 
 def cmd_reset_status(args):
     """查看复位状态"""
     data = _load_json(RESETS_PATH)
     if not data:
-        print("无健康复位记录")
+        print(_("无健康复位记录"))
         return
 
     system = getattr(args, "system", None)
@@ -167,13 +168,13 @@ def cmd_reset_status(args):
         ts = data.get(system)
         if ts:
             t = time.strftime("%m-%d %H:%M:%S", time.localtime(ts))
-            print(f"{system}: 复位于 {t}（{time.time() - ts:.0f}s前）")
+            print(_("%s: 复位于 %s（%.0fs前）") % (system, t, time.time() - ts))
         else:
-            print(f"{system}: 无复位记录")
+            print(_("%s: 无复位记录") % system)
     else:
         for name, ts in sorted(data.items()):
             t = time.strftime("%m-%d %H:%M:%S", time.localtime(ts))
-            print(f"  {name}: 复位于 {t}")
+            print(_("  %s: 复位于 %s") % (name, t))
 
 
 def _fmt_duration(seconds):
@@ -188,18 +189,18 @@ def _fmt_duration(seconds):
 
 def _fmt_probe(probe_seconds):
     if probe_seconds is None or probe_seconds < 0:
-        return "🔴未上报"
+        return _("🔴未上报")
     if probe_seconds > 120:
-        return f"🟠离线{_fmt_duration(probe_seconds)}"
-    return f"🟢在线{_fmt_duration(probe_seconds)}前"
+        return _("🟠离线%s") % _fmt_duration(probe_seconds)
+    return _("🟢在线%s前") % _fmt_duration(probe_seconds)
 
 
 def _fmt_health(level):
     icons = {
-        "healthy": "[健康]",
-        "sub_healthy": "[亚健康]",
-        "warning": "[警告]",
-        "critical": "[危急]",
+        "healthy": _("[健康]"),
+        "sub_healthy": _("[亚健康]"),
+        "warning": _("[警告]"),
+        "critical": _("[危急]"),
     }
     return icons.get(level, level)
 
@@ -207,7 +208,7 @@ def _fmt_health(level):
 def cmd_instance_list(args):
     """列出所有实例及其健康状态"""
     if not DB.exists():
-        print("数据库不存在")
+        print(_("数据库不存在"))
         return
 
     conn = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
@@ -252,7 +253,7 @@ def cmd_instance_list(args):
     # 收集每系统的诊断（按 fault_id 合并，过滤忽略/归档）
     per_system_dx = {}
     try:
-        rows = conn.execute(f"SELECT system, fault_id, severity FROM {tbl}").fetchall()
+        rows = diagnoses_query(conn, "system, fault_id, severity")
         for r in rows:
             s = r["system"]
             fid = r["fault_id"]
@@ -289,7 +290,8 @@ def cmd_instance_list(args):
     conn.close()
 
     # 输出
-    header = f"{'实例':<18} {'探针':<14} {'健康':<8} {'疾病':<6} {'P0':<4} {'P1':<4} {'P2':<4}"
+    h_cols = (_("实例"), _("探针"), _("健康"), _("疾病"))
+    header = f"{h_cols[0]:<18} {h_cols[1]:<14} {h_cols[2]:<8} {h_cols[3]:<6} {'P0':<4} {'P1':<4} {'P2':<4}"
     sep = "─" * len(header)
     print(header)
     print(sep)
@@ -313,15 +315,15 @@ def cmd_instance_list(args):
 
         extra = ""
         if resets.get(s):
-            extra = " [复位]"
+            extra = _(" [复位]")
         d_count = sum(1 for k in dismissed if k.endswith(f":{s}"))
         a_count = sum(1 for k in archived if k.endswith(f":{s}"))
         if d_count or a_count:
             parts = []
             if a_count:
-                parts.append(f"归档{a_count}")
+                parts.append(_("归档%d") % a_count)
             if d_count:
-                parts.append(f"忽略{d_count}")
+                parts.append(_("忽略%d") % d_count)
             extra += f" ({', '.join(parts)})"
 
         print(

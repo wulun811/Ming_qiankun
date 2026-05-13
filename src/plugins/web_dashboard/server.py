@@ -68,6 +68,7 @@ AVAILABLE_QUERIES = [
 
 class MingjingHandler(http.server.BaseHTTPRequestHandler):
     auth_token = None  # P0-6: 可选的 token 认证
+    MAX_BODY = 65536  # POST body 上限 64KB
 
     def _check_auth(self) -> bool:
         """P0-6: 验证 token（如果设置了）"""
@@ -163,6 +164,9 @@ class MingjingHandler(http.server.BaseHTTPRequestHandler):
     def _handle_dismiss_alert(self):
         try:
             length = int(self.headers.get("Content-Length", 0))
+            if length > self.MAX_BODY:
+                self._send_json(413, {"error": "body too large"})
+                return
             body = json.loads(self.rfile.read(length)) if length > 0 else {}
         except Exception:
             self._send_json(400, {"error": "invalid JSON"})
@@ -196,6 +200,9 @@ class MingjingHandler(http.server.BaseHTTPRequestHandler):
         """忽略某实例的某疾病 (key = fault_id:display_name)"""
         try:
             length = int(self.headers.get("Content-Length", 0))
+            if length > self.MAX_BODY:
+                self._send_json(413, {"error": "body too large"})
+                return
             body = json.loads(self.rfile.read(length)) if length > 0 else {}
         except Exception:
             self._send_json(400, {"error": "invalid JSON"})
@@ -230,6 +237,9 @@ class MingjingHandler(http.server.BaseHTTPRequestHandler):
         """恢复被忽略/归档的疾病"""
         try:
             length = int(self.headers.get("Content-Length", 0))
+            if length > self.MAX_BODY:
+                self._send_json(413, {"error": "body too large"})
+                return
             body = json.loads(self.rfile.read(length)) if length > 0 else {}
         except Exception:
             self._send_json(400, {"error": "invalid JSON"})
@@ -285,6 +295,9 @@ class MingjingHandler(http.server.BaseHTTPRequestHandler):
         """归档某实例的某疾病 (key = fault_id:display_name)，隐藏到折叠区"""
         try:
             length = int(self.headers.get("Content-Length", 0))
+            if length > self.MAX_BODY:
+                self._send_json(413, {"error": "body too large"})
+                return
             body = json.loads(self.rfile.read(length)) if length > 0 else {}
         except Exception:
             self._send_json(400, {"error": "invalid JSON"})
@@ -315,6 +328,9 @@ class MingjingHandler(http.server.BaseHTTPRequestHandler):
         """健康复位：将某实例强制设为健康，新病情出现后自动失效"""
         try:
             length = int(self.headers.get("Content-Length", 0))
+            if length > self.MAX_BODY:
+                self._send_json(413, {"error": "body too large"})
+                return
             body = json.loads(self.rfile.read(length)) if length > 0 else {}
         except Exception:
             self._send_json(400, {"error": "invalid JSON"})
@@ -350,6 +366,9 @@ class MingjingHandler(http.server.BaseHTTPRequestHandler):
         """暂停/恢复观察某实例（探针端文件信号）"""
         try:
             length = int(self.headers.get("Content-Length", 0))
+            if length > self.MAX_BODY:
+                self._send_json(413, {"error": "body too large"})
+                return
             body = json.loads(self.rfile.read(length)) if length > 0 else {}
         except Exception:
             self._send_json(400, {"error": "invalid JSON"})
@@ -358,6 +377,9 @@ class MingjingHandler(http.server.BaseHTTPRequestHandler):
         system = body.get("system")
         if action not in ("add", "remove") or not system:
             self._send_json(400, {"error": "action (add/remove) and system required"})
+            return
+        if "/" in system or ".." in system or system.startswith("."):
+            self._send_json(400, {"error": "invalid system name"})
             return
         try:
             paused_dir = Path.home() / ".ming" / ".paused"

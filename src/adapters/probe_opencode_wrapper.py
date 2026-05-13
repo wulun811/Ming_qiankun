@@ -191,6 +191,8 @@ def poll_messages(conn, cursor, limit=500):
             continue
         if d.get("role") != "assistant":
             continue
+        if not d.get("finish"):
+            continue
         time_info = d.get("time", {}) or {}
         latency_ms = None
         if "created" in time_info and "completed" in time_info:

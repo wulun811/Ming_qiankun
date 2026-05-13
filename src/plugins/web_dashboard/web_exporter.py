@@ -1210,6 +1210,7 @@ def export():
             archived,
             resets,
             per_system_triage,
+            disease_catalog,
         )
         disease_distribution = _build_disease_distribution(
             disease_catalog, instance_cards
@@ -1302,6 +1303,7 @@ def export():
         "instance_cards": instance_cards,
         "global_summary": global_summary,
         "disease_distribution": disease_distribution,
+        "disease_catalog": disease_catalog,
         "resource_footprint": _collect_footprint(),
     }
 
@@ -1518,7 +1520,7 @@ def _load_health_resets():
 
 
 def _load_disease_catalog():
-    """加载 diseases.yaml，返回 {fault_id: {name, layer, severity, description}}"""
+    """加载 diseases.yaml，返回 {fault_id: {name, name_en, layer, severity, description, description_en}}"""
     catalog = {}
     if not DISEASES_YAML.exists():
         return catalog
@@ -1529,9 +1531,11 @@ def _load_disease_catalog():
             if rid:
                 catalog[rid] = {
                     "name": d.get("name", ""),
+                    "name_en": d.get("name_en", ""),
                     "layer": d.get("layer", ""),
                     "severity": d.get("severity", "P2"),
                     "description": d.get("description", ""),
+                    "description_en": d.get("description_en", ""),
                 }
     except Exception:
         pass
@@ -1652,6 +1656,7 @@ def _build_instance_cards(
     archived,
     resets,
     per_system_triage,
+    disease_catalog=None,
 ):
     """核心: 按实例聚合诊断，合并同 fault_id，计算健康等级"""
     DISPLAY_NAMES = {"mingjing": "乾坤镜"}
@@ -1762,6 +1767,8 @@ def _build_instance_cards(
         for fid, g_list in grouped.items():
             g_list.sort(key=lambda x: x.get("created_at", 0), reverse=True)
             latest = dict(g_list[0])
+            if disease_catalog:
+                latest["diagnosis_name_en"] = disease_catalog.get(fid, {}).get("name_en", "")
             latest["occurrence_count"] = len(g_list)
             latest["first_seen"] = min(dx.get("occurred_at", 0) for dx in g_list)
             latest["last_seen"] = max(dx.get("occurred_at_last", 0) for dx in g_list)

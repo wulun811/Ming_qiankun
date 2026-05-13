@@ -2,23 +2,24 @@
 # 职责：cmd_skill / cmd_config / cmd_web
 import json, shutil, subprocess, sys
 from pathlib import Path
+from i18n import _
 
 
 def cmd_skill(args):
     registry = Path.home() / ".ming" / "plugins"
     if args.action == "install":
         if not args.name or ".." in args.name or "/" in args.name:
-            print("错误: 无效的技能名称")
+            print(_("错误: 无效的技能名称"))
             sys.exit(1)
         dest = registry / args.name
         dest.mkdir(parents=True, exist_ok=True)
         if hasattr(args, "path") and args.path:
             src = Path(args.path).resolve()
             if not str(src).startswith(str(Path.home())):
-                print("错误: 源文件必须在用户目录下")
+                print(_("错误: 源文件必须在用户目录下"))
                 sys.exit(1)
             shutil.copy(str(src), dest / f"{args.name}.skill.yaml")
-        print("已安装技能: {}".format(args.name))
+        print(_("已安装技能: %s") % args.name)
     elif args.action == "list":
         for p in registry.glob("*/"):
             hb = p / ".plugin_heartbeat"
@@ -27,7 +28,7 @@ def cmd_skill(args):
     elif args.action == "logs":
         log_dir = registry / args.name / "out"
         if not log_dir.exists():
-            print("无日志记录")
+            print(_("无日志记录"))
             return
         files = sorted(log_dir.glob("*.jsonl"))
         tail = args.tail if hasattr(args, "tail") else 50
@@ -52,12 +53,12 @@ def cmd_config(args):
     elif args.action == "validate":
         config, _, errors = load_config()
         if errors:
-            print("校验失败：")
+            print(_("校验失败\uff1a"))
             for e in errors:
                 print(f"  - {e}")
             sys.exit(1)
         else:
-            print("校验通过")
+            print(_("校验通过"))
 
 
 def cmd_web(args):
@@ -120,16 +121,16 @@ WantedBy=default.target
 
     if args.action == "install":
         if not daemon_path.exists():
-            print(f"错误: 找不到守护进程脚本 {daemon_path}")
+            print(_("错误: 找不到守护进程脚本 %s") % daemon_path)
             sys.exit(1)
         unit_dir.mkdir(parents=True, exist_ok=True)
         unit_path.write_text(unit_content, encoding="utf-8")
-        print(f"  单元文件: {unit_path}")
+        print(_("  单元文件: %s") % unit_path)
         subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
         subprocess.run(
             ["systemctl", "--user", "enable", "--now", service_name], check=True
         )
-        print(f"  服务 {service_name} 已安装并启动")
+        print(_("  服务 %s 已安装并启动") % service_name)
 
     elif args.action == "remove":
         subprocess.run(
@@ -143,7 +144,7 @@ WantedBy=default.target
         if unit_path.exists():
             unit_path.unlink()
         subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
-        print(f"  服务 {service_name} 已移除")
+        print(_("  服务 %s 已移除") % service_name)
 
     elif args.action == "status":
         result = subprocess.run(
@@ -160,26 +161,26 @@ WantedBy=default.target
             if result.stderr:
                 print(result.stderr)
         if not unit_path.exists():
-            print(f"\n  ⚠ 单元文件不存在 ({unit_path})")
+            print(_("\n  \u26a0 单元文件不存在 (%s)") % unit_path)
         elif result.returncode != 0:
-            print(f"\n  提示：运行 'ming service install' 安装服务")
+            print(_("\n  提示\uff1a运行 'ming service install' 安装服务"))
 
 
 def cmd_hermes_install(args):
     """一键安装乾坤镜插件到 Hermes Agent"""
     src_dir = Path(__file__).parent.parent / "extensions" / "hermes"
     if not (src_dir / "plugin.yaml").exists():
-        print("错误: 找不到 hermes 插件，请确保乾坤镜安装完整")
+        print(_("错误: 找不到 hermes 插件，请确保乾坤镜安装完整"))
         sys.exit(1)
 
     plugin_dest = Path.home() / ".hermes" / "plugins" / "mingjing-probe"
     skill_src = src_dir / "skills" / "mingjing" / "SKILL.md"
     skill_dest = Path.home() / ".hermes" / "skills" / "mingjing"
 
-    print("乾坤镜 Hermes 插件一键安装")
-    print(f"  源: {src_dir}")
-    print(f"  插件目标: {plugin_dest}")
-    print(f"  技能目标: {skill_dest}")
+    print(_("乾坤镜 Hermes 插件一键安装"))
+    print(_("  源: %s") % src_dir)
+    print(_("  插件目标: %s") % plugin_dest)
+    print(_("  技能目标: %s") % skill_dest)
     print()
 
     # 1. 复制插件文件
@@ -195,13 +196,13 @@ def cmd_hermes_install(args):
     pycache = plugin_dest / "__pycache__"
     if pycache.exists():
         shutil.rmtree(pycache)
-    print("  ✓ 插件文件已部署")
+    print(_("  \u2713 插件文件已部署"))
 
     # 2. 复制技能文件到 ~/.hermes/skills/
     skill_dest.mkdir(parents=True, exist_ok=True)
     if skill_src.exists():
         shutil.copy(str(skill_src), str(skill_dest / "SKILL.md"))
-        print("  ✓ 技能文件已部署")
+        print(_("  \u2713 技能文件已部署"))
 
     # 3. 启用插件
     try:
@@ -212,19 +213,17 @@ def cmd_hermes_install(args):
             timeout=10,
         )
         if result.returncode == 0:
-            print("  ✓ 插件已启用")
+            print(_("  \u2713 插件已启用"))
         else:
-            print(f"  ⚠ 插件启用失败: {result.stderr.strip()}")
+            print(_("  ⚠ 插件启用失败: %s") % result.stderr.strip())
     except FileNotFoundError:
-        print(
-            "  ⚠ 未找到 hermes 命令，请手动运行: hermes plugins enable mingjing-probe"
-        )
+        print(_("  ⚠ 未找到 hermes 命令，请手动运行: hermes plugins enable mingjing-probe"))
     except subprocess.TimeoutExpired:
-        print("  ⚠ hermes 命令超时，请手动运行: hermes plugins enable mingjing-probe")
+        print(_("  ⚠ hermes 命令超时，请手动运行: hermes plugins enable mingjing-probe"))
 
     print()
-    print("安装完成！重启 Hermes 后乾坤镜探针自动生效。")
-    print("环境变量（可选）:")
+    print(_("安装完成\uff01重启 Hermes 后乾坤镜探针自动生效。"))
+    print(_("环境变量（可选）:"))
     print("  MING_HOME=~/.ming")
     print("  MING_SYSTEM_NAME=hermes-agent")
     print("  MING_MODE=white")

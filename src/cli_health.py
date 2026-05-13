@@ -2,6 +2,7 @@
 # 职责：cmd_health / cmd_self_check / cmd_status
 import json, sqlite3, sys, time
 from pathlib import Path
+from i18n import _
 
 sys.path.insert(0, str(Path(__file__).parent))
 from archiver_util import diagnoses_query
@@ -24,14 +25,14 @@ def cmd_health(args):
         sys.exit(0 if overall == "ok" else (1 if overall == "warn" else 2))
 
     icons = {"ok": "[OK]", "warn": "[!!]", "crit": "[XX]", "error": "[??]"}
-    print("乾坤镜健康状态")
+    print(_("乾坤镜健康状态"))
     print("=" * 40)
     for name, r in results.items():
         icon = icons.get(r["status"], "[??]")
         val = r["value"]
         val_str = f"{val}" if val is not None else "N/A"
-        print(f"  {icon} {name}: {val_str} (阈值 {r['threshold']})")
-    print(f"\n总体状态: {overall}")
+        print(_("  %s %s: %s (阈值 %s)") % (icon, name, val_str, r["threshold"]))
+    print(_("\n总体状态: %s") % overall)
     sys.exit(0 if overall == "ok" else (1 if overall == "warn" else 2))
 
 
@@ -51,14 +52,14 @@ def cmd_self_check(args):
         "otel_export": "OTEL 导出",
     }
     suggestion_map = {
-        "vacuum_due": "执行 VACUUM：ming admin vacuum",
-        "archiver_lag": "检查归档器是否正常运行",
-        "wal_size": "WAL 过大，建议执行 VACUUM",
-        "disk_free": "磁盘空间不足，清理旧数据",
-        "hot_dir": "热轨文件堆积过多，检查归档器",
-        "otel_bridge": "检查 OTEL Bridge 是否启动",
-        "lit_lite": "检查诊断引擎是否卡死",
-        "otel_export": "检查 OTEL 导出配置",
+        "vacuum_due": _("执行 VACUUM\uff1aming admin vacuum"),
+        "archiver_lag": _("检查归档器是否正常运行"),
+        "wal_size": _("WAL 过大，建议执行 VACUUM"),
+        "disk_free": _("磁盘空间不足，清理旧数据"),
+        "hot_dir": _("热轨文件堆积过多，检查归档器"),
+        "otel_bridge": _("检查 OTEL Bridge 是否启动"),
+        "lit_lite": _("检查诊断引擎是否卡死"),
+        "otel_export": _("检查 OTEL 导出配置"),
     }
     suggestions = [
         suggestion_map[name]
@@ -80,7 +81,7 @@ def cmd_self_check(args):
         sys.exit(0 if overall == "ok" else (1 if overall == "warn" else 2))
 
     icons = {"ok": "[OK]", "warn": "[!!]", "crit": "[XX]", "error": "[??]"}
-    print("乾坤镜自健康检查")
+    print(_("乾坤镜自健康检查"))
     print("=" * 40)
     for name, r in results.items():
         icon = icons.get(r["status"], "[??]")
@@ -91,9 +92,9 @@ def cmd_self_check(args):
         elif name in ("wal_size", "disk_free"):
             val_str = f"{val:.0f}MB" if val is not None else "N/A"
         elif name == "hot_dir":
-            val_str = f"{val} 文件" if val is not None else "N/A"
+            val_str = _("%.0f 文件") % val if val is not None else "N/A"
         elif name == "vacuum_due":
-            val_str = "建议执行" if val else "正常"
+            val_str = _("建议执行") if val else _("正常")
         elif name == "otel_bridge":
             val_str = (
                 val
@@ -106,9 +107,12 @@ def cmd_self_check(args):
             val_str = f"{val * 100:.0f}%" if val is not None else "N/A"
         else:
             val_str = str(val)
-        print(f"  {icon} {labels.get(name, name)}：{val_str}（阈值 {thresh}）")
+        print(
+            _("  %s %s\uff1a%s\uff08阈值 %s\uff09")
+            % (icon, labels.get(name, name), val_str, thresh)
+        )
     if suggestions:
-        print("\n建议动作：")
+        print(_("\n建议动作\uff1a"))
         for i, s in enumerate(suggestions, 1):
             print(f"  {i}. {s}")
     sys.exit(0 if overall == "ok" else (1 if overall == "warn" else 2))
@@ -209,7 +213,7 @@ def cmd_status(args):
             }
 
             print()
-            print("── 实例健康 ──")
+            print(_("── 实例健康 ──"))
             for s in systems:
                 # 探针时间
                 row = conn.execute(
@@ -220,14 +224,16 @@ def cmd_status(args):
                     probe_age = now - row[0]
 
                 if probe_age < 0:
-                    probe_str = "🔴未上报"
+                    probe_str = _("\U0001f534未上报")
                 elif probe_age > 120:
                     h = probe_age // 3600
                     probe_str = (
-                        f"🟠离线{h}h" if h > 0 else f"🟠离线{probe_age / 60:.0f}m"
+                        _("\U0001f7e0离线%dh") % h
+                        if h > 0
+                        else _("\U0001f7e0离线%.0fm") % (probe_age / 60)
                     )
                 else:
-                    probe_str = f"🟢在线{probe_age:.0f}s前"
+                    probe_str = _("\U0001f7e2在线%.0fs前") % probe_age
 
                 # 诊断（过滤忽略/归档）
                 try:
@@ -272,14 +278,14 @@ def cmd_status(args):
                 if d_count or a_count:
                     parts = []
                     if d_count:
-                        parts.append(f"忽略{d_count}")
+                        parts.append(_("忽略%d") % d_count)
                     if a_count:
-                        parts.append(f"归档{a_count}")
-                    extra = f" ({', '.join(parts)})"
+                        parts.append(_("归档%d") % a_count)
+                    extra = _(" (%s)") % ", ".join(parts)
                 if reset_ts:
-                    extra += " [已复位]"
+                    extra += _(" [已复位]")
 
-                dx_info = f"P0:{p0} P1:{p1} P2:{p2}" if dx_rows else "无疾病"
+                dx_info = f"P0:{p0} P1:{p1} P2:{p2}" if dx_rows else _("无疾病")
                 print(f"  {icon} {s:<20s} {probe_str:<12s} {dx_info}{extra}")
 
             conn.close()

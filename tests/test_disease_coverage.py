@@ -114,12 +114,12 @@ def run_diagnose():
     importlib.reload(lit_dx)
     importlib.reload(lit_rule)
 
-    # 覆盖模块级变量
-    lit_lite.DB = TEST_DB
-    lit_lite.OUT = TEST_OUT
-    lit_lite.TRIAGE_SNAPSHOT = TEST_TRIAGE
-    lit_dx.HOT = TEST_OUT
-    lit_rule.TRIAGE_SNAPSHOT = TEST_TRIAGE
+    # 覆盖模块级变量（使用 Path 对象）
+    lit_lite.DB = Path(TEST_DB)
+    lit_lite.OUT = Path(TEST_OUT)
+    lit_lite.TRIAGE_SNAPSHOT = Path(TEST_TRIAGE)
+    lit_dx.HOT = Path(TEST_OUT)
+    lit_rule.TRIAGE_SNAPSHOT = Path(TEST_TRIAGE)
 
     lit_lite.diagnose()
 

@@ -17,6 +17,8 @@ KNOWN_PROBES_DEFAULT = frozenset(
         "mingjing",
         "opencode",
         "hermes",
+        "agentscope",
+        "semantic_kernel",
     }
 )
 
